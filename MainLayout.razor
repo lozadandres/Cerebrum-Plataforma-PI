@@ -1,0 +1,463 @@
+﻿@inherits LayoutComponentBase
+@implements IDisposable
+@rendermode InteractiveServer
+@inject Microsoft.Extensions.Configuration.IConfiguration config
+@inject NavigationManager NavigationManager
+<RadzenComponents @rendermode="InteractiveAuto" />
+<div class="page" >
+    
+    <style>
+        .rz-layout .rz-header {
+            background-color: #012e67 !important;
+        }
+
+        .rz-sidebar-toggle:hover{
+            background-color: green !important;
+        }
+
+        .rz-layout .rz-sidebar {
+            height: 100% !important;
+        }
+
+        
+
+        .rz-navigation-item-link:hover {
+            background-color: aliceblue;
+        }
+
+        .rz-button.rz-primary.rz-shade-default, .rz-chkbox-box.rz-state-active {
+            background-color: #012e67 !important;
+        }
+
+        .rz-pager-page.rz-state-active, .rz-state-highlight.rz-menuitem, .rz-state-highlight.rz-autocomplete-list-item, .rz-state-highlight.rz-multiselect-item, .rz-autocomplete-items li.rz-state-highlight, .rz-dropdown-items li.rz-state-highlight, .rz-multiselect-items li.rz-state-highlight, .rz-dropdown-item.rz-state-highlight {
+            background-color: aliceblue;
+            color: green !important;
+        }
+
+        .rz-grid-table-striped tbody > tr:not(.rz-expanded-row-content):nth-child(even) > td{
+            background-color: aliceblue !important;
+        }
+
+        .page[b-iphxa628px]{
+            display:contents !important;
+        }
+
+        .e-popup.e-popup-open.e-dialog {
+            min-height: 100% !important;
+            width: 100% !important;
+            left: 0 !important;
+        }
+    </style>
+    <RadzenLayout>
+        <RadzenHeader >
+            <ChildContent>
+                <RadzenRow AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Start" Gap="0px">
+                    <RadzenColumn Size="5">
+                        <RadzenStack Orientation="Radzen.Orientation.Horizontal" AlignItems="AlignItems.Center">
+                            <RadzenSidebarToggle Click="@(() => sidebar1Expanded = !sidebar1Expanded)" />
+                            <span style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">Plataforma PI</span>
+                        </RadzenStack>
+                    </RadzenColumn>
+                    <RadzenColumn Size="7">
+                        <RadzenStack Orientation="Radzen.Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.End">
+                            <div class="rz-display-none rz-display-sm-inline-flex align-items-center">
+                                
+                                
+                                <CultureSwitcher />
+                            </div>
+                            <RadzenAppearanceToggle class="rz-mx-2" />
+                            <RadzenSidebarToggle Icon="settings" Click="@(() => configSidebarExpanded = !configSidebarExpanded)" class="rz-m-0" />
+                        </RadzenStack>
+                    </RadzenColumn>
+                </RadzenRow>
+            </ChildContent>
+
+        </RadzenHeader>
+        <RadzenSidebar Responsive="true" Style="width: max-content;  height:700px" @bind-Expanded="@sidebar1Expanded">
+            <RadzenPanelMenu Style="--rz-panel-menu-item-background-color: #012e67;
+                        --rz-panel-menu-item-color: white;
+                        --rz-panel-menu-item-active-color: yellow;
+                        --rz-panel-menu-item-hover-color: green;
+                        --rz-panel-menu-item-2nd-level-background-color: #012e67;
+                         --rz-panel-menu-item-2nd-level-color: white;
+                        --rz-panel-menu-item-2nd-level-active-color: yellow;
+                        --rz-panel-menu-item-2nd-level-hover-color: green;
+                        --rz-panel-menu-item-3rd-level-background-color: #012e67;
+                         --rz-panel-menu-item-3rd-level-color: white;
+                        --rz-panel-menu-item-3rd-level-active-color: yellow;
+                        --rz-panel-menu-item-3rd-level-hover-color: green;"
+                             DisplayStyle="@(sidebarExpanded ? MenuItemDisplayStyle.IconAndText : MenuItemDisplayStyle.Icon)"
+                             ShowArrow="true" Multiple="true">
+            @if (true)//loginState.classBar=="")
+                        {
+            @if (true)//loginState.IsLoggedIn.Equals(true))
+            {
+
+                        <RadzenPanelMenuItem Text="Inicio" Icon="dashboard" Click="@(() => NavigateTo(""))" />
+
+                        <RadzenPanelMenuItem Text="Administración" Icon="assignment">
+                            <RadzenPanelMenuItem Text="Datos Institución" Icon="patient_list" Click="@(() => NavigateTo("Basicos/Areas"))" />
+                            <RadzenPanelMenuItem Text="Sedes" Icon="attach_file" Click="@(() => NavigateTo("#"))" />
+                            <RadzenPanelMenuItem Text="Usuarios" Icon="attach_file" Click="@(() => NavigateTo("Basicos/Profesores"))" />
+                            <RadzenPanelMenuItem Text="Países" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasico/BasicosPaises"))" />
+                            <RadzenPanelMenuItem Text="Departamentos" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasico/Departamentos"))" />
+                            <RadzenPanelMenuItem Text="Ciudades" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasico/Ciudades"))" />
+                            <RadzenPanelMenuItem Text="Actividades Económicas" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasico/BasicosActividades"))" />
+                            <RadzenPanelMenuItem Text="Períodos" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasico/BasicosPeriodos"))" />
+                            <RadzenPanelMenuItem Text="Cuentas" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasico30/Cuentas"))" />
+                            <RadzenPanelMenuItem Text="CuentasModelosContables" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasico30/CuentasModelosContables"))" />
+                            <RadzenPanelMenuItem Text="Terceros" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasicot/BasicosTerceros1"))" />
+                            <RadzenPanelMenuItem Text="Líneas" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasico/Lineas"))" />
+                            <RadzenPanelMenuItem Text="Tributos" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasico/Tributos"))" />
+                            <RadzenPanelMenuItem Text="ResponsabilidadesFiscales" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasico/ResponsabilidadesFiscales"))" />
+                            <RadzenPanelMenuItem Text="Identificadores" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasico/Identificadores"))" />
+                            <RadzenPanelMenuItem Text="TiposDocumentos" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasico30/TiposDocumentos"))" />
+                            <RadzenPanelMenuItem Text="ModelosContables" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasico30/ModelosContables"))" />
+                            <RadzenPanelMenuItem Text="Consecutivos" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasico30/Consecutivos"))" />
+                            <RadzenPanelMenuItem Text="Referencias" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasico30/Referencias1"))" />
+                            <RadzenPanelMenuItem Text="TipoReferencias" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasico/TipoReferencias"))" />
+                            <RadzenPanelMenuItem Text="Comprobantes" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasico30/Comprobantes"))" />
+                            <RadzenPanelMenuItem Text="unidadesnegocios" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasico/unidadesnegocios"))" />
+                            <RadzenPanelMenuItem Text="Facturación" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasicoComercial/MovimientoComercial1"))" />
+                            <RadzenPanelMenuItem Text="Kardex" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasicoKardex"))" />
+                            <RadzenPanelMenuItem Text="Reporte Países" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasicoPais/BasicosPaises"))" />
+                            <RadzenPanelMenuItem Text="Factura 80cm" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasicoFactura80"))" />
+                            <RadzenPanelMenuItem Text="Departamentos MH" Icon="attach_file" Click="@(() => NavigateTo("Basicos/ModeloBasicoMasterHierarchy/Departamentos"))" />
+                            <RadzenPanelMenuItem Text="Grupos" Icon="attach_file" Click="@(() => NavigateTo("Basicos/Grupos"))" />
+                            <RadzenPanelMenuItem Text="Azafatas" Icon="attach_file" Click="@(() => NavigateTo("#"))" />
+                            <RadzenPanelMenuItem Text="Conductores" Icon="attach_file" Click="@(() => NavigateTo("#"))" />
+                            <RadzenPanelMenuItem Text="Rutas" Icon="attach_file" Click="@(() => NavigateTo("#"))" />
+                            <RadzenPanelMenuItem Text="Paraderos" Icon="attach_file" Click="@(() => NavigateTo("#"))" />
+                            <RadzenPanelMenuItem Text="Evaluación Institucional" Icon="attach_file" Click="@(() => NavigateTo("#"))" />
+                        </RadzenPanelMenuItem>
+
+                        <RadzenPanelMenuItem Text="Académico" Icon="explore">
+                            <RadzenPanelMenuItem Text="Matrícula" Icon="patient_list" Click="@(() => NavigateTo("Basicos/Matriculas"))" />
+                            <RadzenPanelMenuItem Text="Asignación Académica" Icon="attach_file" Click="@(() => NavigateTo("Basicos/GruposMaterias"))" />
+                            <RadzenPanelMenuItem Text="Referentes de Calidad" Icon="attach_file" Click="@(() => NavigateTo("Curricular/Docareas"))" />
+                            <RadzenPanelMenuItem Text="Matrices Curriculares" Icon="attach_file" Click="@(() => NavigateTo(""))" />
+                            <RadzenPanelMenuItem Text="Plan de Aula" Icon="attach_file" Click="@(() => NavigateTo("#"))" />
+                            <RadzenPanelMenuItem Text="Areas" Icon="attach_file">
+                                <RadzenPanelMenuItem Text="Lenguaje" Icon="attach_file" Click="@(() => NavigateTo("Curricular/MatrizCurricular/12"))" />
+                                <RadzenPanelMenuItem Text="Matemáticas" Icon="attach_file" Click="@(() => NavigateTo("Curricular/MatrizCurricular/15"))" />
+                                <RadzenPanelMenuItem Text="Ciencias Sociales" Icon="attach_file" Click="@(() => NavigateTo("Curricular/MatrizCurricular/4"))" />
+                                <RadzenPanelMenuItem Text="Ciencias Naturales" Icon="attach_file" Click="@(() => NavigateTo("Curricular/MatrizCurricular/3"))" />
+                                <RadzenPanelMenuItem Text="Inglés" Icon="attach_file" Click="@(() => NavigateTo("Curricular/MatrizCurricular/14"))" />
+                                <RadzenPanelMenuItem Text="Tecnología" Icon="attach_file" Click="@(() => NavigateTo("Curricular/MatrizCurricular/16"))" />
+                                <RadzenPanelMenuItem Text="Filosofía" Icon="attach_file" Click="@(() => NavigateTo("Curricular/MatrizCurricular/19"))" />
+                                <RadzenPanelMenuItem Text="Educación Física" Icon="attach_file" Click="@(() => NavigateTo("Curricular/MatrizCurricular/9"))" />
+                                <RadzenPanelMenuItem Text="Educación Artística" Icon="attach_file" Click="@(() => NavigateTo("Curricular/MatrizCurricular/5"))" />
+                                <RadzenPanelMenuItem Text="Educación Etica y Valores Humanos" Icon="attach_file" Click="@(() => NavigateTo("Curricular/MatrizCurricular/10"))" />
+                                <RadzenPanelMenuItem Text="Religión" Icon="attach_file" Click="@(() => NavigateTo("Curricular/MatrizCurricular/11"))" />
+                                <RadzenPanelMenuItem Text="Cátedra de la Paz" Icon="attach_file" Click="@(() => NavigateTo("#"))" />
+                                <RadzenPanelMenuItem Text="Constitución y Democracia" Icon="attach_file" Click="@(() => NavigateTo("#"))" />
+                            </RadzenPanelMenuItem>
+                            <RadzenPanelMenuItem Text="Planeación Curricular" Icon="patient_list" Click="@(() => NavigateTo("#"))" />
+                            <RadzenPanelMenuItem Text="Formulación de Desempeño e Indicadores" Icon="patient_list" Click="@(() => NavigateTo("#"))" />
+                        </RadzenPanelMenuItem>
+
+                        <RadzenPanelMenuItem Text="Financiero" Icon="view_list" Click="@(() => NavigateTo("#"))" />
+
+                        <RadzenPanelMenuItem Text="Comunicaciones" Icon="patient_list" Click="@(() => NavigateTo("#"))" />
+                        <RadzenPanelMenuItem Text="Complementos" Icon="attach_file" Click="@(() => NavigateTo("#"))" />
+
+                        <RadzenPanelMenuItem Text="@loginState.name" Icon="home" Click="@(() => NavigateTo("#"))" />
+                    
+              
+            }
+                        }
+            </RadzenPanelMenu>
+        </RadzenSidebar>
+       @*  <div class="sidebar" style="@loginState.classBar">
+            <NavMenu />
+        </div> *@
+
+        <RadzenBody>
+            <div class="rz-p-4" style="overflow:auto">
+                @Body
+            </div>
+        </RadzenBody>
+        
+    </RadzenLayout>
+
+
+
+    @* <div class="sidebar" style="@loginState.classBar" >
+        <NavMenu />
+    </div> *@
+
+@* 
+    <main>
+      
+        <div class="top-row px-4" style="background-color: #e3f2fd;">
+
+            @if (loginState.classBar == "")
+            {
+                <button @onclick="@onmouseup" class="btn btn-primary"><span class="oi oi-collapse-left" aria-hidden="true" style="align-content:flex-start"></span></button>
+            }
+            else
+            {
+                <button @onclick="@onmouseup" class="btn btn-primary"><span class="oi oi-collapse-right" aria-hidden="true" style="align-content:start"></span></button>
+            }
+
+            @if (@loginState.IsLoggedIn)
+            {
+                <a href="CarCompras/@loginState.username" target="_blank"><span><i class="bi bi-cart"></i></span>Carro de Compras</a>
+            }
+            @if (@loginState.IsLoggedIn)
+            {
+                <a href="CarPeds/@loginState.username" target="_blank"><span><i class="bi bi-cart"></i></span>Carro de Pedidos</a>
+            }
+            <a href="https://www.importadoramazluv.com" target="_blank">Mazluv</a>        <div style="padding-left:10px;width:1px;height:25px;color:#E4E4E4">|</div>
+            <CultureSwitcher />
+           
+            }
+
+        </div>
+
+
+        <article class="content px-4">
+            @Body
+        </article>
+
+        
+
+        <div class="bottom-row px-4" style="display:none">
+            <div class="row bg-light pt-5 pb-5 m-0">
+                <div class="col-md-6 offset-md-3 text-center">
+                    <div class="single-footer-widget tp_widgets">
+                        <h4 class="footer_title large_title text-dark">Cuentas</h4>
+                        <p>
+                            <i class="fas fa-university"></i> C.C. Banco de Occidente No. <b>033 480 203</b> (Recaudo en línea)<br />
+                            <i class="fas fa-university"></i> C.C. Bancolombia No. <b>721 086 658 88</b><br />
+                            <i class="fas fa-university"></i> C.C. Davivienda No. <b>127 269 999 570</b> (Formato Empresarial)<br />
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <footer class="bg-dark text-white text-center py-3" style="display:none">
+                <div class="container">
+                    <div class="row section_gap pt-4">
+                        @foreach(var xsede in xsedes)
+                        {
+                            <div class="col-lg-3 col-md-6 col-sm-6 pt-2" >
+                                <div class="pt-5 single-footer-widget tp_widgets">
+                                    <h4 class="footer_title">@(xsede.Split(","[0])[0])</h4>
+                                    <div class="ml-40">
+                                        <p class="sm-head">
+                                            <span class="fa fa-location-arrow"></span>
+                                            @(xsede.Split(","[0])[1])
+                                        </p>
+                                        <p></p>
+
+                                        <p class="sm-head">
+                                            <span class="fa fa-phone"></span>
+                                            Número de Teléfono
+                                        </p>
+                                        <p>
+                                            @(xsede.Split(","[0])[2])
+                                        </p>
+
+                                        <p class="sm-head">
+                                            <span class="fa fa-envelope"></span>
+                                            Correo Electrónico
+                                        </p>
+                                        <p>
+                                            @(xsede.Split(","[0])[3])
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </footer>
+
+
+        </div>
+    </main> *@
+</div>
+
+<div id="blazor-error-ui">
+    @loginState.error
+    <a href="" class="reload">Reload</a>
+    <a class="dismiss">🗙</a>
+</div>
+
+@code {
+    NavMenu sidebar = default!;
+    bool sidebar1Expanded = true;
+    string sedes = "";
+    string[] xsedes;
+    bool sidebarExpanded = true;
+    bool configSidebarExpanded = false;
+    bool mobile = false;
+    string NameFromSessionStorage { get; set; } = "";
+    private bool IconMenuActive { get; set; } = false;
+    private string? IconMenuCssClass => IconMenuActive ? "width: 80px;" : null;
+
+    private async Task NavigateTo(string route)  // NUEVO
+    {
+        if (route == "#")
+        {
+            NavigationManager.NavigateTo(route);
+        }
+        else
+        {
+            NavigationManager.NavigateTo(route, forceLoad: true);  // Fuerza recarga
+        }
+        await Task.CompletedTask;
+    }
+
+    protected void ToggleIconMenu(bool iconMenuActive)
+    {
+        IconMenuActive = iconMenuActive;
+    }
+
+    string obtpermiso(System.Data.DataSet ds, string usuario, string formulario)
+    {
+        System.Data.DataRow[] drn = null;
+        drn = ds.Tables[0].Select("cedula='" + usuario + "' and formulario='" + formulario + "' and objeto='Form'");
+        if (drn.Length == 0) return ("");
+        return ("" + drn[0]["acceso"].ToString());
+
+    }
+
+
+    protected override void OnInitialized()
+    {
+        loginState.OnChange += StateHasChanged;
+        sedes = config["sedes_footer"];
+        xsedes = sedes.Split(";"[0]);
+        NavigationManager.LocationChanged += HandleLocationChanged;
+    }
+
+    private async void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)  // NUEVO
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userAgent = httpContextAccessor?.HttpContext?.Request.Headers["User-Agent"].ToString();
+        if (userAgent != null && (userAgent.Contains("Android") || userAgent.Contains("iPhone")))
+        {
+            mobile = true;
+           
+        }
+        
+        try
+        {
+
+
+
+            NameFromSessionStorage = await sessionStorage.GetItemAsync<string>("usuario");
+
+
+            string pusuario = NameFromSessionStorage;
+            if (string.IsNullOrEmpty(NameFromSessionStorage))
+            {
+                NameFromSessionStorage = "Nothing Saved";
+            }
+            else
+            {
+                System.Data.DataRow[] drn = null;
+                System.Data.DataSet ds;
+                Npgsql.NpgsqlDataAdapter da = null;
+                var xcadena = config["DbConnection"];
+                Npgsql.NpgsqlConnection cone = new Npgsql.NpgsqlConnection(xcadena);
+                cone.Open();
+
+
+                da = new Npgsql.NpgsqlDataAdapter("select u.*,c.* " +
+                       "from uterceros as u left join usuariosacciones as c on u.cedula=c.codigousuario", cone);
+                ds = new System.Data.DataSet();
+                da.Fill(ds);
+                drn = ds.Tables[0].Select("cedula='" + pusuario + "'");
+                if (drn.Length != 0)
+                {
+
+
+                    var scompras = obtpermiso(ds, pusuario, "SubirCompras");
+                    var bcompras = obtpermiso(ds, pusuario, "BuscarCompras");
+                    var sventas = obtpermiso(ds, pusuario, "ActVentas");
+                    var bventas = obtpermiso(ds, pusuario, "Ventas");
+                    var scontab = obtpermiso(ds, pusuario, "Contabilidad");
+
+                    loginState.SetLogin(true, pusuario, drn[0]["nombrecompleto"].ToString(), drn[0]["privilegios"].ToString(), xcadena,
+                            scompras, bcompras, sventas, bventas, scontab);
+                    loginState.fechacompras = "";
+                    loginState.fechaventas = "";
+
+
+                }
+                if (NavManager.Uri.Contains("Certificados"))
+                {
+                    loginState.classBar = "display:none";
+                    loginState.classBarFooter = "display:none";
+                }
+                if (NavManager.Uri.Contains("Contabilidad"))
+                    loginState.classBar = "display:none";
+                cone.Close();
+
+            }//nameif
+        }
+        catch (Exception)
+        {
+            Console.WriteLine("error reading 'name'");
+        }
+
+
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+
+        }
+        if (mobile)
+            sidebar1Expanded = false;
+    }
+    public void onmouseup()
+    {
+        ///if (loginState.IsLoggedIn)
+       // {
+            if (loginState.classBar == "")
+                loginState.classBar = "display:none";
+            else
+                loginState.classBar = "";
+        //}
+    }
+
+    public void salir()
+    {
+        //username = "";
+        //password = "";
+        string xcadena = config["DbConnection"];
+        loginState.SetLogin(false, "", "", "", xcadena, "", "", "", "", "");
+        NavManager.NavigateTo("/");
+        NavigationManager.NavigateTo("/", forceLoad: true);
+    }
+
+    public void Dispose()
+    {
+        loginState.OnChange -= StateHasChanged;
+        NavigationManager.LocationChanged -= HandleLocationChanged;
+    }
+
+    // private void ToogleSidebar()
+    // {
+    //     if (sidebar != null)
+    //     {
+    //         sidebar ..ToggleSidebar();
+    //     }
+    // }
+
+    // private void ToggleSidebar() => sidebar.ToggleSidebar();
+
+
+
+
+}
