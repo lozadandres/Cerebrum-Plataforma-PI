@@ -1,0 +1,2067 @@
+@page "/Basicos/ModeloBasicoKardex"
+@rendermode InteractiveServer
+@using Npgsql
+@using NpgsqlTypes
+@using System.Data
+@using Microsoft.Extensions.Configuration
+@using Radzen
+@using Radzen.Blazor
+@using System.Linq
+@inject IConfiguration config
+@inject NotificationService NotificationService
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Kardex</PageTitle>
+<h2>Kardex</h2>
+
+<div class="container-fluid mt-3">
+    @try
+    {
+        @if (visibleMessage)
+        {
+            <RadzenAlert AlertStyle="@(msgError.Contains("por defecto") ? AlertStyle.Warning : AlertStyle.Danger)"
+                         ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter"
+                         AllowClose="true" Close="@(() => visibleMessage = false)">
+                @msgError
+            </RadzenAlert>
+        }
+
+        <!-- Panel de Filtros -->
+        <RadzenCard class="mb-3">
+            <RadzenText TextStyle="TextStyle.Subtitle2" TagName="TagName.H3">Filtros de Consulta</RadzenText>
+
+            <!-- Rango de Fechas -->
+            <RadzenText TextStyle="TextStyle.Body1" TagName="TagName.H4" class="mt-3 mb-2">Rango de Fechas</RadzenText>
+            <RadzenRow Gap="1rem">
+                <RadzenColumn Size="12" SizeMD="3">
+                    <RadzenFormField Text="Fecha Inicial" Variant="Variant.Outlined">
+                        <RadzenDatePicker @bind-Value="FechaInicial" DateFormat="yyyy-MM-dd" />
+                    </RadzenFormField>
+                </RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="3">
+                    <RadzenFormField Text="Fecha Final" Variant="Variant.Outlined">
+                        <RadzenDatePicker @bind-Value="FechaFinal" DateFormat="yyyy-MM-dd" />
+                    </RadzenFormField>
+                </RadzenColumn>
+            </RadzenRow>
+
+            <!-- Rango de Referencias -->
+            <RadzenText TextStyle="TextStyle.Body1" TagName="TagName.H4" class="mt-3 mb-2">Rango de Referencias</RadzenText>
+            <RadzenRow Gap="1rem">
+                <RadzenColumn Size="12" SizeMD="6">
+                    <RadzenCheckBox @bind-Value="FiltrarPorDescripcion" Name="chkDesc" />
+                    <RadzenLabel Text="Filtrar por Descripci�n" Component="chkDesc" class="ms-2" />
+                </RadzenColumn>
+            </RadzenRow>
+            <RadzenRow Gap="1rem" class="mt-2">
+                <RadzenColumn Size="12" SizeMD="3">
+                    <RadzenFormField Text="Referencia Inicial" Variant="Variant.Outlined">
+                        <RadzenTextBox @bind-Value="ReferenciaInicial" />
+                        <RadzenButton Icon="search" ButtonStyle="ButtonStyle.Light" Size="Radzen.ButtonSize.Small"
+                                      Click="@(() => BuscarReferencias(1))" class="ms-2" />
+                    </RadzenFormField>
+                </RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="3">
+                    <RadzenFormField Text="Referencia Final" Variant="Variant.Outlined">
+                        <RadzenTextBox @bind-Value="ReferenciaFinal" />
+                        <RadzenButton Icon="search" ButtonStyle="ButtonStyle.Light" Size="Radzen.ButtonSize.Small"
+                                      Click="@(() => BuscarReferencias(2))" class="ms-2" />
+                    </RadzenFormField>
+                </RadzenColumn>
+            </RadzenRow>
+
+            <!-- Rango de Clientes -->
+            <RadzenText TextStyle="TextStyle.Body1" TagName="TagName.H4" class="mt-3 mb-2">Rango de Clientes</RadzenText>
+            <RadzenRow Gap="1rem">
+                <RadzenColumn Size="12" SizeMD="3">
+                    <RadzenFormField Text="Cliente Inicial" Variant="Variant.Outlined">
+                        <RadzenTextBox @bind-Value="ClienteInicial" />
+                        <RadzenButton Icon="search" ButtonStyle="ButtonStyle.Light" Size="Radzen.ButtonSize.Small"
+                                      Click="@(() => BuscarClientes(7))" class="ms-2" />
+                    </RadzenFormField>
+                </RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="3">
+                    <RadzenFormField Text="Tercero Final" Variant="Variant.Outlined">
+                        <RadzenTextBox @bind-Value="ClienteFinal" />
+                        <RadzenButton Icon="search" ButtonStyle="ButtonStyle.Light" Size="Radzen.ButtonSize.Small"
+                                      Click="@(() => BuscarClientes(8))" class="ms-2" />
+                    </RadzenFormField>
+                </RadzenColumn>
+            </RadzenRow>
+
+            <!-- Rango de Bodegas -->
+            <RadzenText TextStyle="TextStyle.Body1" TagName="TagName.H4" class="mt-3 mb-2">Rango de Bodegas</RadzenText>
+            <RadzenRow Gap="1rem">
+                <RadzenColumn Size="12" SizeMD="3">
+                    <RadzenFormField Text="Bodega Inicial" Variant="Variant.Outlined">
+                        <RadzenTextBox @bind-Value="BodegaInicial" />
+                        <RadzenButton Icon="search" ButtonStyle="ButtonStyle.Light" Size="Radzen.ButtonSize.Small"
+                                      Click="@(() => BuscarBodegas(9))" class="ms-2" />
+                    </RadzenFormField>
+                </RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="3">
+                    <RadzenFormField Text="Bodega Final" Variant="Variant.Outlined">
+                        <RadzenTextBox @bind-Value="BodegaFinal" />
+                        <RadzenButton Icon="search" ButtonStyle="ButtonStyle.Light" Size="Radzen.ButtonSize.Small"
+                                      Click="@(() => BuscarBodegas(10))" class="ms-2" />
+                    </RadzenFormField>
+                </RadzenColumn>
+            </RadzenRow>
+
+            <!-- Formato -->
+            <RadzenRow Gap="1rem" class="mt-3">
+                <RadzenColumn Size="12" SizeMD="3">
+                    <RadzenFormField Text="Formato" Variant="Variant.Outlined">
+                        <RadzenDropDown @bind-Value="FormatoSeleccionado" Data="@formatoOptions"
+                                        TextProperty="Text" ValueProperty="Value" />
+                    </RadzenFormField>
+                </RadzenColumn>
+            </RadzenRow>
+
+            <!-- Opciones adicionales -->
+            <RadzenText TextStyle="TextStyle.Body1" TagName="TagName.H4" class="mt-3 mb-2">Opciones</RadzenText>
+            <RadzenRow Gap="1rem">
+                <RadzenColumn Size="12" SizeMD="2">
+                    <RadzenCheckBox @bind-Value="MostrarSeriales" Name="chkSeriales" />
+                    <RadzenLabel Text="Mostrar Seriales" Component="chkSeriales" class="ms-2" />
+                </RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="2">
+                    <RadzenCheckBox @bind-Value="MostrarCosto" Name="chkCosto" />
+                    <RadzenLabel Text="Mostrar Costo" Component="chkCosto" class="ms-2" />
+                </RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="2">
+                    <RadzenCheckBox @bind-Value="MostrarPrecio" Name="chkPrecio" />
+                    <RadzenLabel Text="Mostrar Precio" Component="chkPrecio" class="ms-2" />
+                </RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="2">
+                    <RadzenCheckBox @bind-Value="DocumentosAnulados" Name="chkAnulados" />
+                    <RadzenLabel Text="Documentos Anulados" Component="chkAnulados" class="ms-2" />
+                </RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="2">
+                    <RadzenCheckBox @bind-Value="PorDebajoStock" Name="chkStock" />
+                    <RadzenLabel Text="Por Debajo del Stock" Component="chkStock" class="ms-2" />
+                </RadzenColumn>
+            </RadzenRow>
+
+            <!-- Bot�n de consulta -->
+            <RadzenRow class="mt-3">
+                <RadzenColumn>
+                    <RadzenButton Text="Ejecutar Consulta" Icon="play_arrow" ButtonStyle="ButtonStyle.Primary"
+                                  Click="@EjecutarConsulta" IsBusy="@consultaEnProceso" />
+                    <RadzenButton Text="Probar Conexi�n" Icon="wifi" ButtonStyle="ButtonStyle.Secondary"
+                                  Click="@ProbarConexion" class="ms-2" />
+                </RadzenColumn>
+            </RadzenRow>
+        </RadzenCard>
+
+
+
+        <!-- Modal de B�squeda Integrado -->
+        @if (mostrarModalBusqueda)
+        {
+            <div class="modal fade show" style="display: block; background-color: rgba(0,0,0,0.5); height: 1000px !important" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Seleccione @tituloModal</h5>
+                            <button type="button" class="btn-close" @onclick="CerrarModalBusqueda"></button>
+                        </div>
+                        <div class="modal-body">
+                            <RadzenStack Gap="1rem">
+                                <RadzenTextBox @bind-Value="@filtroBusqueda" Placeholder="Buscar..." Change="@FiltrarDatosBusqueda" />
+
+                                <RadzenDataGrid @ref="gridBusqueda" Data="@datosBusquedaFiltrados" TItem="ItemModal"
+                                                AllowPaging="true" PageSize="10" AllowSorting="true"
+                                                RowDoubleClick="@OnRowDoubleClickBusqueda">
+                                    <Columns>
+                                        <RadzenDataGridColumn TItem="ItemModal" Width="60px" Sortable="false" Filterable="false">
+                                            <Template Context="item">
+                                                <RadzenButton Icon="check" ButtonStyle="ButtonStyle.Success" Size="Radzen.ButtonSize.Small"
+                                                              Click="@(() => SeleccionarItemBusqueda(item))" />
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="ItemModal" Property="Codigo" Title="C�digo" Width="120px" />
+                                        <RadzenDataGridColumn TItem="ItemModal" Property="Nombre" Title="Nombre" />
+                                    </Columns>
+                                </RadzenDataGrid>
+
+                                <RadzenStack Orientation="Radzen.Orientation.Horizontal" JustifyContent="Radzen.JustifyContent.End" Gap="0.5rem">
+                                    <RadzenButton Text="Cancelar" ButtonStyle="ButtonStyle.Light" Click="@CerrarModalBusqueda" />
+                                </RadzenStack>
+                            </RadzenStack>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Resultados del Kardex con Jerarqu�a Maestro-Detalle -->
+        @if (DatosKardex != null && DatosKardex.Any())
+        {
+            <RadzenCard class="mt-3">
+                <RadzenText TextStyle="TextStyle.Subtitle2" TagName="TagName.H3">Resultados del Kardex</RadzenText>
+
+                <RadzenDataGrid @ref="grid" AllowColumnPicking="true" AllowFiltering="true" AllowPaging="true" AllowSorting="true"
+                                Data="@DatosKardex" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                PageSize="50" ShowPagingSummary="true"
+                                EmptyText="No se encontraron datos"
+                                ExpandMode="DataGridExpandMode.Multiple">
+
+                    <HeaderTemplate>
+                        <RadzenStack Orientation="Radzen.Orientation.Horizontal" AlignItems="Radzen.AlignItems.Center" Gap="1rem;" Wrap="Radzen.FlexWrap.Wrap">
+                            <RadzenButton Text="Export XLS" Icon="grid_on" Click="@(args => Export("excel"))" />
+                            <RadzenButton Text="Export CSV" Icon="wrap_text" Click="@(args => Export("csv"))" />
+                            <RadzenButton Text="Export PDF" Icon="picture_as_pdf" Click="@(args => Export("pdf"))" />
+                        </RadzenStack>
+                    </HeaderTemplate>
+
+                    <Template Context="referencia">
+                        <!-- Mostrar bodegas para esta referencia -->
+                        @if (referencia.Bodegas.Any())
+                        {
+                            <RadzenDataGrid AllowColumnPicking="false" AllowFiltering="false" AllowPaging="false" AllowSorting="true"
+                                            Data="@referencia.Bodegas" TItem="KardexBodega" Style="margin-left: 1rem; margin-bottom: 1rem;"
+                                            ExpandMode="DataGridExpandMode.Single">
+                                <Template Context="bodega">
+                                    <!-- Mostrar movimientos para esta bodega -->
+                                    <RadzenCard Style="margin: 0.5rem; padding: 0.5rem; background-color: #f0f8ff;">
+                                        <RadzenText TextStyle="TextStyle.Subtitle2" TagName="TagName.H5" class="mb-2">
+                                            Movimientos detallados para: @bodega.CodigoBodega - @bodega.NombreBodega
+                                        </RadzenText>
+                                        <RadzenDataGrid AllowFiltering="false" AllowPaging="false" AllowSorting="true"
+                                                        Data="@bodega.Movimientos" TItem="MovimientoKardex" Style="margin-left: 1rem;">
+                                            <Columns>
+                                                <RadzenDataGridColumn TItem="MovimientoKardex" Property="Fecha" Title="Fecha" Width="120px" FormatString="{0:yyyy-MM-dd}" />
+                                                <RadzenDataGridColumn TItem="MovimientoKardex" Property="TipoDocumento" Title="Tipo Doc." Width="80px" />
+                                                <RadzenDataGridColumn TItem="MovimientoKardex" Property="NumeroDocumento" Title="N�mero" Width="120px" />
+                                                <RadzenDataGridColumn TItem="MovimientoKardex" Property="Tercero" Title="Tercero" Width="200px" />
+                                                <RadzenDataGridColumn TItem="MovimientoKardex" Property="Entradas" Title="Entradas" Width="100px" FormatString="{0:N2}" TextAlign="Radzen.TextAlign.Right" />
+                                                <RadzenDataGridColumn TItem="MovimientoKardex" Property="Salidas" Title="Salidas" Width="100px" FormatString="{0:N2}" TextAlign="Radzen.TextAlign.Right" />
+                                                <RadzenDataGridColumn TItem="MovimientoKardex" Property="Saldo" Title="Saldo" Width="100px" FormatString="{0:N2}" TextAlign="Radzen.TextAlign.Right" />
+                                                @if (MostrarCosto)
+                                                {
+                                                    <RadzenDataGridColumn TItem="MovimientoKardex" Property="CostoUnitario" Title="Costo Unit." Width="100px" FormatString="{0:N2}" TextAlign="Radzen.TextAlign.Right" />
+                                                    <RadzenDataGridColumn TItem="MovimientoKardex" Property="ValorTotal" Title="Valor Total" Width="120px" FormatString="{0:N2}" TextAlign="Radzen.TextAlign.Right" />
+                                                }
+                                                @if (MostrarSeriales)
+                                                {
+                                                    <RadzenDataGridColumn TItem="MovimientoKardex" Property="Serial" Title="Serial" Width="150px" />
+                                                }
+                                            </Columns>
+                                        </RadzenDataGrid>
+                                    </RadzenCard>
+                                </Template>
+
+                                <Columns>
+                                    <RadzenDataGridColumn TItem="KardexBodega" Width="40px" Sortable="false" Filterable="false">
+                                        <Template Context="bodega">
+                                            <RadzenButton Icon="@(bodega.Expanded ? "expand_more" : "chevron_right")"
+                                                          ButtonStyle="ButtonStyle.Light"
+                                                          Class="m-0 p-0"
+                                                          Click="@(args => ToggleExpandBodega(bodega))" />
+                                        </Template>
+                                    </RadzenDataGridColumn>
+
+                                    <RadzenDataGridColumn TItem="KardexBodega" Property="CodigoBodega" Title="C�digo Bodega" Width="120px" />
+                                    <RadzenDataGridColumn TItem="KardexBodega" Property="NombreBodega" Title="Nombre Bodega" Width="200px" />
+                                    <RadzenDataGridColumn TItem="KardexBodega" Property="ExistenciaInicial" Title="Exist. Inicial" Width="120px" FormatString="{0:N2}" TextAlign="Radzen.TextAlign.Right" />
+                                    <RadzenDataGridColumn TItem="KardexBodega" Property="Entradas" Title="Entradas" Width="100px" FormatString="{0:N2}" TextAlign="Radzen.TextAlign.Right" />
+                                    <RadzenDataGridColumn TItem="KardexBodega" Property="Salidas" Title="Salidas" Width="100px" FormatString="{0:N2}" TextAlign="Radzen.TextAlign.Right" />
+                                    <RadzenDataGridColumn TItem="KardexBodega" Property="ExistenciaFinal" Title="Exist. Final" Width="120px" FormatString="{0:N2}" TextAlign="Radzen.TextAlign.Right" />
+
+                                    @if (MostrarCosto)
+                                    {
+                                        <RadzenDataGridColumn TItem="KardexBodega" Property="CostoPromedio" Title="Costo Prom." Width="120px" FormatString="{0:N2}" TextAlign="Radzen.TextAlign.Right" />
+                                        <RadzenDataGridColumn TItem="KardexBodega" Property="ValorTotal" Title="Valor Total" Width="120px" FormatString="{0:N2}" TextAlign="Radzen.TextAlign.Right" />
+                                    }
+
+                                    @if (MostrarPrecio)
+                                    {
+                                        <RadzenDataGridColumn TItem="KardexBodega" Property="Precio" Title="Precio" Width="100px" FormatString="{0:N2}" TextAlign="Radzen.TextAlign.Right" />
+                                    }
+                                </Columns>
+                            </RadzenDataGrid>
+                        }
+                    </Template>
+
+                    <Columns>
+                        <RadzenDataGridColumn TItem="KardexReferencia" Width="40px" Sortable="false" Filterable="false">
+                            <Template Context="referencia">
+                                <RadzenButton Icon="@(referencia.Expanded ? "expand_more" : "chevron_right")"
+                                              ButtonStyle="ButtonStyle.Light"
+                                              Class="m-0 p-0"
+                                              Click="@(args => ToggleExpandReferencia(referencia))" />
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <RadzenDataGridColumn TItem="KardexReferencia" Property="CodigoReferencia" Title="C�digo Referencia" Width="150px" />
+                        <RadzenDataGridColumn TItem="KardexReferencia" Property="NombreReferencia" Title="Nombre Referencia" Width="300px" />
+                        <RadzenDataGridColumn TItem="KardexReferencia" Title="Total Bodegas" Width="120px">
+                            <Template Context="referencia">
+                                @referencia.Bodegas.Count
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="KardexReferencia" Title="Total Existencia" Width="140px" TextAlign="Radzen.TextAlign.Right">
+                            <Template Context="referencia">
+                                @(referencia.Bodegas.Sum(b => b.ExistenciaFinal).ToString("N2"))
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="KardexReferencia" Title="Total Entradas" Width="120px" TextAlign="Radzen.TextAlign.Right">
+                            <Template Context="referencia">
+                                @(referencia.Bodegas.Sum(b => b.Entradas).ToString("N2"))
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="KardexReferencia" Title="Total Salidas" Width="120px" TextAlign="Radzen.TextAlign.Right">
+                            <Template Context="referencia">
+                                @(referencia.Bodegas.Sum(b => b.Salidas).ToString("N2"))
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            </RadzenCard>
+        }
+    }
+    catch (Exception e0)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+            @e0.Message
+        </RadzenAlert>
+    }
+</div>
+@code {
+    // Variables de configuraci�n y conexi�n
+    private NpgsqlConnection cone = null;
+    private string xcadena = "";
+    private bool visibleMessage = false;
+    private string msgError = "";
+    private bool consultaEnProceso = false;
+    private RadzenDataGrid<KardexReferencia> grid;
+
+    // Variables replicadas del kardex original para soporte NIIF/Fiscal y multi-engine
+    private string xcosto = "costopromedio";
+    private string trampaniif = "COALESCE(idniifinv,'N')";
+    private string trampafiscal = "COALESCE(idfiscal,'N')";
+    private string xnull = "COALESCE(";
+    private string xtipb = "''";
+    private string sqlobs = "COALESCE(obsequio,0)";
+    private string sqlsaldos = "";
+    private string primerafechakardex = "";
+    private string xmotor = "PG"; // PostgreSQL por defecto
+
+    // Propiedades para los filtros
+    private DateTime FechaInicial { get; set; } = DateTime.Today;
+    private DateTime FechaFinal { get; set; } = DateTime.Today.AddMonths(1);
+    private bool FiltrarPorDescripcion { get; set; } = false;
+    private string ReferenciaInicial { get; set; } = "";
+    private string ReferenciaFinal { get; set; } = "";
+    private string ClienteInicial { get; set; } = "";
+    private string ClienteFinal { get; set; } = "";
+    private string BodegaInicial { get; set; } = "00";
+    private string BodegaFinal { get; set; } = "00";
+    private string FormatoSeleccionado { get; set; } = "0";
+    private bool MostrarSeriales { get; set; } = false;
+    private bool MostrarCosto { get; set; } = false;
+    private bool MostrarPrecio { get; set; } = false;
+    private bool DocumentosAnulados { get; set; } = false;
+    private bool PorDebajoStock { get; set; } = false;
+
+    // Propiedades para los resultados
+    private List<KardexReferencia> DatosKardex { get; set; } = new List<KardexReferencia>();
+
+    // Variables para el modal de b�squeda integrado
+    private bool mostrarModalBusqueda = false;
+    private string tituloModal = "";
+    private int campoActualBusqueda = 0;
+    private string filtroBusqueda = "";
+    private List<ItemModal> datosBusqueda = new List<ItemModal>();
+    private List<ItemModal> datosBusquedaFiltrados = new List<ItemModal>();
+    private RadzenDataGrid<ItemModal> gridBusqueda;
+
+    // Opciones para el dropdown de formato
+    private List<FormatoOption> formatoOptions = new List<FormatoOption>
+    {
+        new FormatoOption { Value = "", Text = "Seleccione..." },
+        new FormatoOption { Value = "0", Text = "Referencia" },
+        new FormatoOption { Value = "1", Text = "Cliente" }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Obtener la cadena de conexi�n desde appsettings.json
+            xcadena = config.GetConnectionString("DbConnection1");
+
+            // Si no se encuentra en appsettings.json, usar la cadena por defecto especificada
+            if (string.IsNullOrEmpty(xcadena))
+            {
+                xcadena = "Host=xxxxx;Port=xxxxx;Database=nameDB;Username=postgres;Password=xxxxx;connectionlifetime=3";
+            }
+
+            // Inicializar fechas por defecto
+            FechaInicial = DateTime.Today;
+            FechaFinal = DateTime.Today.AddMonths(1);
+            BodegaInicial = "00";
+            BodegaFinal = "00";
+            FormatoSeleccionado = "0";
+        }
+        catch (Exception ex)
+        {
+            // En caso de error, usar la cadena de conexi�n por defecto
+            xcadena = "Host=xxxxx;Port=xxxxx;Database=nameDB;Username=postgres;Password=xxxxx;connectionlifetime=3";
+            msgError = $"Error al inicializar: {ex.Message}";
+            visibleMessage = true;
+        }
+    }
+
+    private async Task BuscarReferencias(int campo)
+    {
+        await MostrarModalBusquedaIntegrado("referencias", campo, "Referencias");
+    }
+
+    private async Task BuscarClientes(int campo)
+    {
+        await MostrarModalBusquedaIntegrado("clientes", campo, "Clientes");
+    }
+
+    private async Task BuscarBodegas(int campo)
+    {
+        await MostrarModalBusquedaIntegrado("bodegas", campo, "Bodegas");
+    }
+
+    private async Task MostrarModalBusquedaIntegrado(string tipo, int campo, string titulo)
+    {
+        try
+        {
+            campoActualBusqueda = campo;
+            tituloModal = titulo;
+            filtroBusqueda = "";
+
+            datosBusqueda = await ObtenerDatosBusqueda(tipo);
+            datosBusquedaFiltrados = datosBusqueda;
+
+            mostrarModalBusqueda = true;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            msgError = $"Error en b�squeda: {ex.Message}";
+            visibleMessage = true;
+        }
+    }
+
+    private void AsignarValorCampo(int campo, string valor)
+    {
+        switch (campo)
+        {
+            case 1: ReferenciaInicial = valor; break;
+            case 2: ReferenciaFinal = valor; break;
+            case 7: ClienteInicial = valor; break;
+            case 8: ClienteFinal = valor; break;
+            case 9: BodegaInicial = valor; break;
+            case 10: BodegaFinal = valor; break;
+        }
+        StateHasChanged();
+    }
+
+    private async Task<List<ItemModal>> ObtenerDatosBusqueda(string tipo)
+    {
+        var datos = new List<ItemModal>();
+
+        try
+        {
+            using (var connection = new NpgsqlConnection(xcadena))
+            {
+                await connection.OpenAsync();
+                string sql = "";
+
+                switch (tipo)
+                {
+                    case "referencias":
+                        sql = "SELECT codigoreferencia as codigo, nombrereferencia as nombre FROM inventarioreferencias ORDER BY codigoreferencia";
+                        break;
+                    case "clientes":
+                        sql = "SELECT cedula as codigo, nombrecompleto as nombre FROM uterceros WHERE cedula IN (SELECT cedula FROM uclientes) ORDER BY nombrecompleto";
+                        break;
+                    case "bodegas":
+                        sql = "SELECT codigobodega as codigo, nombrebodega as nombre FROM inventariobodegas ORDER BY codigobodega";
+                        break;
+                }
+
+                using (var cmd = new NpgsqlCommand(sql, connection))
+                using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        datos.Add(new ItemModal
+                        {
+                            Codigo = reader["codigo"].ToString(),
+                            Nombre = reader["nombre"].ToString()
+                        });
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            msgError = $"Error al obtener datos de {tipo}: {ex.Message}";
+            visibleMessage = true;
+        }
+
+        return datos;
+    }
+
+    private async Task ProbarConexion()
+    {
+        try
+        {
+            using (var connection = new NpgsqlConnection(xcadena))
+            {
+                await connection.OpenAsync();
+                msgError = "? Conexi�n exitosa a la base de datos SNERPFE";
+                visibleMessage = true;
+                NotificationService.Notify(NotificationSeverity.Success, "Conexi�n", "Conexi�n a base de datos exitosa");
+            }
+        }
+        catch (Exception ex)
+        {
+            msgError = $"? Error de conexi�n: {ex.Message}. Se usar�n datos simulados.";
+            visibleMessage = true;
+            NotificationService.Notify(NotificationSeverity.Error, "Conexi�n", "Error de conexi�n, se usar�n datos simulados");
+        }
+        StateHasChanged();
+    }
+
+    private async Task EjecutarConsulta()
+    {
+        consultaEnProceso = true;
+        visibleMessage = false;
+        DatosKardex.Clear();
+        StateHasChanged();
+
+        try
+        {
+            await Task.Delay(500); // Simular procesamiento
+            await CargarDatosKardex();
+
+            if (DatosKardex.Any())
+            {
+                NotificationService.Notify(NotificationSeverity.Success, "Consulta", $"Se encontraron {DatosKardex.Count} registros");
+            }
+            else
+            {
+                NotificationService.Notify(NotificationSeverity.Info, "Consulta", "No se encontraron datos para los filtros especificados");
+            }
+        }
+        catch (Exception ex)
+        {
+            msgError = $"Error al ejecutar consulta: {ex.Message}";
+            visibleMessage = true;
+            NotificationService.Notify(NotificationSeverity.Error, "Error", "Error al ejecutar la consulta");
+        }
+        finally
+        {
+            consultaEnProceso = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CargarDatosKardex()
+    {
+        try
+        {
+            using (var connection = new NpgsqlConnection(xcadena))
+            {
+                await connection.OpenAsync();
+
+                // Cargar par�metros globales primero
+                await CargarParametrosGlobales(connection);
+
+                // Determinar el formato de consulta
+                if (FormatoSeleccionado == "1") // Formato por cliente
+                {
+                    var datosCliente = await CargarKardexPorCliente(connection);
+                    // Convertir cada KardexItem a KardexReferencia para asignar a DatosKardex
+                    DatosKardex = datosCliente.Select(item => new KardexReferencia
+                    {
+                        CodigoReferencia = item.CodigoReferencia,
+                        NombreReferencia = item.NombreReferencia,
+                        Bodegas = new List<KardexBodega>
+        {
+            new KardexBodega
+            {
+                CodigoBodega = item.CodigoBodega,
+                ExistenciaInicial = item.ExistenciaInicial,
+                Entradas = item.Entradas,
+                Salidas = item.Salidas,
+                ExistenciaFinal = item.ExistenciaFinal,
+                CostoPromedio = item.CostoPromedio,
+                ValorTotal = item.ValorTotal,
+                Precio = item.Precio,
+                Movimientos = item.Movimientos
+            }
+        }
+                    }).ToList();
+                }
+                else // Formato por referencia (por defecto) - Jerarqu�a: Referencias -> Bodegas -> Movimientos
+                {
+                    // Construir la consulta SQL basada en la l�gica del kardex original
+                    string sql = ConstruirConsultaKardex();
+
+                    var referenciasDict = new Dictionary<string, KardexReferencia>();
+
+                    using (var cmd = new NpgsqlCommand(sql, connection))
+                    {
+                        // Agregar par�metros de fecha como string en formato PostgreSQL
+                        cmd.Parameters.Add("@fechaInicial", NpgsqlDbType.Varchar).Value = FechaInicial.ToString("yyyy-MM-dd");
+                        cmd.Parameters.Add("@fechaFinal", NpgsqlDbType.Varchar).Value = FechaFinal.ToString("yyyy-MM-dd");
+
+                        if (!string.IsNullOrEmpty(ReferenciaInicial))
+                            cmd.Parameters.Add("@referenciaInicial", NpgsqlDbType.Varchar).Value = ReferenciaInicial;
+                        if (!string.IsNullOrEmpty(ReferenciaFinal))
+                            cmd.Parameters.Add("@referenciaFinal", NpgsqlDbType.Varchar).Value = ReferenciaFinal;
+                        if (!string.IsNullOrEmpty(BodegaInicial))
+                            cmd.Parameters.Add("@bodegaInicial", NpgsqlDbType.Varchar).Value = BodegaInicial;
+                        if (!string.IsNullOrEmpty(BodegaFinal))
+                            cmd.Parameters.Add("@bodegaFinal", NpgsqlDbType.Varchar).Value = BodegaFinal;
+                        if (!string.IsNullOrEmpty(ClienteInicial))
+                            cmd.Parameters.Add("@clienteInicial", NpgsqlDbType.Varchar).Value = ClienteInicial;
+                        if (!string.IsNullOrEmpty(ClienteFinal))
+                            cmd.Parameters.Add("@clienteFinal", NpgsqlDbType.Varchar).Value = ClienteFinal;
+
+                        using (var reader = await cmd.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                var codigoReferencia = reader["codigoreferencia"]?.ToString() ?? "";
+                                var nombreReferencia = reader["nombrereferencia"]?.ToString() ?? "";
+                                var codigoBodega = reader["codigobodega"]?.ToString() ?? "";
+                                var nombreBodega = reader["nombrebodega"]?.ToString() ?? "";
+
+                                // Crear o obtener la referencia
+                                if (!referenciasDict.ContainsKey(codigoReferencia))
+                                {
+                                    referenciasDict[codigoReferencia] = new KardexReferencia
+                                    {
+                                        CodigoReferencia = codigoReferencia,
+                                        NombreReferencia = nombreReferencia
+                                    };
+                                }
+
+                                var referencia = referenciasDict[codigoReferencia];
+
+                                // Crear la bodega para esta referencia
+                                var bodega = new KardexBodega
+                                {
+                                    CodigoBodega = codigoBodega,
+                                    NombreBodega = nombreBodega,
+                                    ExistenciaInicial = Convert.ToDecimal(reader["existenciainicial"] ?? 0),
+                                    Entradas = Convert.ToDecimal(reader["entradas"] ?? 0),
+                                    Salidas = Convert.ToDecimal(reader["salidas"] ?? 0),
+                                    ExistenciaFinal = Convert.ToDecimal(reader["existenciafinal"] ?? 0)
+                                };
+
+                                if (MostrarCosto)
+                                {
+                                    bodega.CostoPromedio = Convert.ToDecimal(reader["costopromedio"] ?? 0);
+                                    bodega.ValorTotal = bodega.ExistenciaFinal * bodega.CostoPromedio;
+                                }
+
+                                if (MostrarPrecio)
+                                {
+                                    bodega.Precio = Convert.ToDecimal(reader["precio"] ?? 0);
+                                }
+
+                                // Cargar movimientos detallados para esta bodega
+                                bodega.Movimientos = await CargarMovimientosDetalle(connection, codigoReferencia, codigoBodega);
+
+                                // Agregar la bodega a la referencia
+                                referencia.Bodegas.Add(bodega);
+                            }
+                        }
+                    }
+
+                    // Convertir el diccionario a lista
+                    DatosKardex = referenciasDict.Values.ToList();
+
+                    // Aplicar filtro por debajo del stock despu�s de cargar los datos
+                    if (PorDebajoStock)
+                    {
+                        DatosKardex = DatosKardex.Where(refItem =>
+                            refItem.Bodegas.Any(bodega =>
+                                bodega.ExistenciaFinal < 0 || // Considerar existencias negativas como debajo del stock
+                                (bodega.ExistenciaFinal > 0 && bodega.ExistenciaFinal < 10) // O usar un valor m�nimo
+                            )
+                        ).ToList();
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            msgError = $"Error al cargar datos del kardex: {ex.Message}";
+            visibleMessage = true;
+        }
+    }
+
+    private async Task<List<MovimientoKardex>> CargarMovimientosDetalle(NpgsqlConnection connection, string codigoReferencia, string codigoBodega)
+    {
+        var movimientos = new List<MovimientoKardex>();
+
+        try
+        {
+            // Primero obtener el saldo inicial
+            decimal saldoInicial = await ObtenerSaldoInicial(connection, codigoReferencia, codigoBodega);
+
+            // Agregar movimiento de saldo inicial si existe
+            if (saldoInicial != 0)
+            {
+                movimientos.Add(new MovimientoKardex
+                {
+                    Fecha = FechaInicial,
+                    TipoDocumento = "SI",
+                    NumeroDocumento = "SALDO INICIAL",
+                    Tercero = "",
+                    Entradas = saldoInicial > 0 ? saldoInicial : 0,
+                    Salidas = saldoInicial < 0 ? Math.Abs(saldoInicial) : 0,
+                    Saldo = saldoInicial,
+                    CostoUnitario = 0,
+                    ValorTotal = 0,
+                    Serial = ""
+                });
+            }
+
+            // Consulta principal de movimientos con l�gica completa del kardex original
+            string sql = @"
+                SELECT
+                    e.fechadocumento as fecha,
+                    e.iddocumento as tipodocumento,
+                    e.prefijodocumento || '-' || e.numerodocumento as numerodocumento,
+                    COALESCE(t.nombrecompleto, '') as tercero,
+                    d.cantidad + COALESCE(d.obsequio, 0) as cantidad,
+                    d.preciopesos as costounitario,
+                    COALESCE(d.marcaserial, '') as serial,
+                    d.bodegadestino,
+                    d.referenciacambio
+                FROM inventariodetallemovimiento d
+                INNER JOIN inventarioencabezadomovimiento e ON d.iddocumento = e.iddocumento
+                    AND d.prefijodocumento = e.prefijodocumento
+                    AND d.numerodocumento = e.numerodocumento
+                LEFT JOIN uterceros t ON e.cedula = t.cedula AND e.sucursal = t.sucursal
+                WHERE d.codigoreferencia = @codigoReferencia
+                    AND d.codigobodega = @codigoBodega
+                    AND e.fechadocumento BETWEEN @fechaInicial AND @fechaFinal
+                    AND e.estado = '1'
+                    AND d.iddocumento IN ('IO','OE','DV','DT','AJ','TR','FV','OS','DC','CO')
+                    AND NOT ((e.iddocumento='CO' AND ''='IO') OR
+                            (e.iddocumento='FV' AND ''='DV') OR
+                            (e.iddocumento='DT' AND ''='DV'))
+
+                UNION ALL
+
+                -- Movimientos de traslados (salidas de bodega origen)
+                SELECT
+                    e.fechadocumento as fecha,
+                    'OS' as tipodocumento,
+                    e.prefijodocumento || '-' || e.numerodocumento as numerodocumento,
+                    COALESCE(t.nombrecompleto, '') as tercero,
+                    (d.cantidad + COALESCE(d.obsequio, 0)) * -1 as cantidad,
+                    d.preciopesos as costounitario,
+                    COALESCE(d.marcaserial, '') as serial,
+                    d.bodegadestino,
+                    d.referenciacambio
+                FROM inventariodetallemovimiento d
+                INNER JOIN inventarioencabezadomovimiento e ON d.iddocumento = e.iddocumento
+                    AND d.prefijodocumento = e.prefijodocumento
+                    AND d.numerodocumento = e.numerodocumento
+                LEFT JOIN uterceros t ON e.cedula = t.cedula AND e.sucursal = t.sucursal
+                WHERE d.bodegadestino = @codigoBodega
+                    AND d.codigoreferencia = @codigoReferencia
+                    AND e.fechadocumento BETWEEN @fechaInicial AND @fechaFinal
+                    AND e.estado = '1'
+                    AND d.iddocumento = 'TR'
+
+                UNION ALL
+
+                -- Movimientos de cambios de referencia (entradas)
+                SELECT
+                    e.fechadocumento as fecha,
+                    'OE' as tipodocumento,
+                    e.prefijodocumento || '-' || e.numerodocumento as numerodocumento,
+                    COALESCE(t.nombrecompleto, '') as tercero,
+                    d.cantidad + COALESCE(d.obsequio, 0) as cantidad,
+                    d.preciopesos as costounitario,
+                    COALESCE(d.marcaserial, '') as serial,
+                    d.bodegadestino,
+                    d.referenciacambio
+                FROM inventariodetallemovimiento d
+                INNER JOIN inventarioencabezadomovimiento e ON d.iddocumento = e.iddocumento
+                    AND d.prefijodocumento = e.prefijodocumento
+                    AND d.numerodocumento = e.numerodocumento
+                LEFT JOIN uterceros t ON e.cedula = t.cedula AND e.sucursal = t.sucursal
+                WHERE d.referenciacambio = @codigoReferencia
+                    AND d.codigobodega = @codigoBodega
+                    AND e.fechadocumento BETWEEN @fechaInicial AND @fechaFinal
+                    AND e.estado = '1'
+                    AND d.iddocumento = 'TR'
+
+                ORDER BY fecha, numerodocumento";
+
+            using (var cmd = new NpgsqlCommand(sql, connection))
+            {
+                cmd.Parameters.Add("@codigoReferencia", NpgsqlDbType.Varchar).Value = codigoReferencia;
+                cmd.Parameters.Add("@codigoBodega", NpgsqlDbType.Varchar).Value = codigoBodega;
+                cmd.Parameters.Add("@fechaInicial", NpgsqlDbType.Varchar).Value = FechaInicial.ToString("yyyy-MM-dd");
+                cmd.Parameters.Add("@fechaFinal", NpgsqlDbType.Varchar).Value = FechaFinal.ToString("yyyy-MM-dd");
+
+                using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    decimal saldoAcumulado = saldoInicial;
+
+                    while (await reader.ReadAsync())
+                    {
+                        var tipoDoc = reader["tipodocumento"].ToString();
+                        var cantidad = Convert.ToDecimal(reader["cantidad"]);
+
+                        // Determinar si es entrada o salida seg�n el tipo de documento
+                        decimal entradas = 0;
+                        decimal salidas = 0;
+
+                        if (tipoDoc == "SI")
+                        {
+                            // Ya manejado arriba
+                            continue;
+                        }
+                        else if (new[] { "CO", "OE", "DV", "AJ", "IO", "DT" }.Contains(tipoDoc))
+                        {
+                            entradas = cantidad;
+                        }
+                        else if (new[] { "FV", "OS", "DC", "TR" }.Contains(tipoDoc))
+                        {
+                            salidas = Math.Abs(cantidad);
+                        }
+
+                        saldoAcumulado += entradas - salidas;
+
+                        var movimiento = new MovimientoKardex
+                        {
+                            Fecha = Convert.ToDateTime(reader["fecha"]),
+                            TipoDocumento = tipoDoc,
+                            NumeroDocumento = reader["numerodocumento"].ToString(),
+                            Tercero = reader["tercero"].ToString(),
+                            Entradas = entradas,
+                            Salidas = salidas,
+                            Saldo = saldoAcumulado,
+                            CostoUnitario = Convert.ToDecimal(reader["costounitario"] ?? 0),
+                            Serial = reader["serial"].ToString()
+                        };
+
+                        movimiento.ValorTotal = movimiento.Saldo * movimiento.CostoUnitario;
+                        movimientos.Add(movimiento);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al cargar los movimientos de detalle: {ex.Message}");
+        }
+
+        return movimientos;
+    }
+
+    private async Task<decimal> ObtenerSaldoInicial(NpgsqlConnection connection, string codigoReferencia, string codigoBodega)
+    {
+        try
+        {
+            // Primero intentar obtener de la tabla de saldos
+            string sqlSaldos = @"
+                SELECT COALESCE(existenciainicial, 0) as saldo
+                FROM inventariosaldos
+                WHERE codigoreferencia = @codigoReferencia
+                    AND codigobodega = @codigoBodega
+                    AND anoperiodo = @ano
+                    AND mesperiodo = @mes";
+
+            using (var cmd = new NpgsqlCommand(sqlSaldos, connection))
+            {
+                cmd.Parameters.Add("@codigoReferencia", NpgsqlDbType.Varchar).Value = codigoReferencia;
+                cmd.Parameters.Add("@codigoBodega", NpgsqlDbType.Varchar).Value = codigoBodega;
+                cmd.Parameters.Add("@ano", NpgsqlDbType.Varchar).Value = FechaInicial.Year.ToString();
+                cmd.Parameters.Add("@mes", NpgsqlDbType.Varchar).Value = FechaInicial.Month.ToString("00");
+
+                var result = await cmd.ExecuteScalarAsync();
+                if (result != null && result != DBNull.Value)
+                {
+                    return Convert.ToDecimal(result);
+                }
+            }
+
+            // Si no hay saldo en la tabla, calcular desde movimientos anteriores
+            string sqlMovimientos = @"
+                SELECT COALESCE(SUM(
+                    CASE
+                        WHEN e.iddocumento IN ('CO','OE','DV','AJ','IO','DT') THEN
+                            CASE WHEN NOT ((e.iddocumento='CO' AND ''='IO') OR
+                                          (e.iddocumento='FV' AND ''='DV') OR
+                                          (e.iddocumento='DT' AND ''='DV'))
+                                 THEN d.cantidad + COALESCE(d.obsequio, 0) ELSE 0 END
+                        WHEN e.iddocumento IN ('FV','OS','DC','TR') THEN
+                            CASE WHEN NOT ((e.iddocumento='CO' AND ''='IO') OR
+                                          (e.iddocumento='FV' AND ''='DV') OR
+                                          (e.iddocumento='DT' AND ''='DV'))
+                                 THEN (d.cantidad + COALESCE(d.obsequio, 0)) * -1 ELSE 0 END
+                        ELSE 0
+                    END), 0) as saldo_inicial
+                FROM inventariodetallemovimiento d
+                INNER JOIN inventarioencabezadomovimiento e ON d.iddocumento = e.iddocumento
+                    AND d.prefijodocumento = e.prefijodocumento
+                    AND d.numerodocumento = e.numerodocumento
+                WHERE d.codigoreferencia = @codigoReferencia
+                    AND d.codigobodega = @codigoBodega
+                    AND e.fechadocumento < @fechaInicial
+                    AND e.estado = '1'";
+
+            using (var cmd = new NpgsqlCommand(sqlMovimientos, connection))
+            {
+                cmd.Parameters.Add("@codigoReferencia", NpgsqlDbType.Varchar).Value = codigoReferencia;
+                cmd.Parameters.Add("@codigoBodega", NpgsqlDbType.Varchar).Value = codigoBodega;
+                cmd.Parameters.Add("@fechaInicial", NpgsqlDbType.Varchar).Value = FechaInicial.ToString("yyyy-MM-dd");
+
+                var result = await cmd.ExecuteScalarAsync();
+                return result != null && result != DBNull.Value ? Convert.ToDecimal(result) : 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error getting initial balance: {ex.Message}");
+            return 0;
+        }
+    }
+
+
+
+    private string ConstruirConsultaKardex()
+    {
+        // Consulta basada en la l�gica completa del kardex original del archivo kardex.aspx.cs
+        string anoperiodo = FechaInicial.Year.ToString();
+        string mesperiodo = FechaInicial.Month.ToString("00");
+
+        string sql = @"
+            SELECT
+                r.codigoreferencia,
+                r.nombrereferencia,
+                b.codigobodega,
+                b.nombrebodega,
+                COALESCE(saldos.existenciainicial, 0) as existenciainicial,
+                COALESCE(mov.entradas, 0) as entradas,
+                COALESCE(mov.salidas, 0) as salidas,
+                COALESCE(saldos.existenciainicial, 0) + COALESCE(mov.entradas, 0) - COALESCE(mov.salidas, 0) as existenciafinal,
+                COALESCE(costos.costopromedio, 0) as costopromedio,
+                COALESCE(precios.precio, 0) as precio
+            FROM inventarioreferencias r
+            CROSS JOIN inventariobodegas b
+            LEFT JOIN inventarioreferenciasbodega rb ON r.codigoreferencia = rb.codigoreferencia
+                AND b.codigobodega = rb.codigobodega
+            LEFT JOIN (
+                SELECT
+                    codigoreferencia,
+                    codigobodega,
+                    existenciainicial,
+                    costopromedioinicial
+                FROM inventariosaldos
+                WHERE anoperiodo = '" + anoperiodo + @"'
+                    AND mesperiodo = '" + mesperiodo + @"'
+            ) saldos ON r.codigoreferencia = saldos.codigoreferencia
+                AND b.codigobodega = saldos.codigobodega
+            LEFT JOIN (
+                -- Movimientos principales con l�gica completa del kardex original
+                SELECT
+                    d.codigoreferencia,
+                    d.codigobodega,
+                    SUM(CASE
+                        WHEN e.iddocumento IN ('CO','OE','DV','AJ','IO','DT') THEN
+                            CASE WHEN NOT ((e.iddocumento='CO' AND ''='IO') OR
+                                          (e.iddocumento='FV' AND ''='DV') OR
+                                          (e.iddocumento='DT' AND ''='DV'))
+                                 THEN d.cantidad + COALESCE(d.obsequio, 0) ELSE 0 END
+                        ELSE 0
+                    END) as entradas,
+                    SUM(CASE
+                        WHEN e.iddocumento IN ('FV','OS','DC','TR') THEN
+                            CASE WHEN NOT ((e.iddocumento='CO' AND ''='IO') OR
+                                          (e.iddocumento='FV' AND ''='DV') OR
+                                          (e.iddocumento='DT' AND ''='DV'))
+                                 THEN d.cantidad + COALESCE(d.obsequio, 0) ELSE 0 END
+                        ELSE 0
+                    END) as salidas
+                FROM inventariodetallemovimiento d
+                INNER JOIN inventarioencabezadomovimiento e ON d.iddocumento = e.iddocumento
+                    AND d.prefijodocumento = e.prefijodocumento
+                    AND d.numerodocumento = e.numerodocumento
+                WHERE e.fechadocumento BETWEEN @fechaInicial AND @fechaFinal
+                    AND e.estado = '1'
+                    AND d.iddocumento IN ('IO','OE','DV','DT','AJ','TR','FV','OS','DC','CO')
+                GROUP BY d.codigoreferencia, d.codigobodega
+
+                UNION ALL
+
+                -- Traslados - Salidas de bodega origen
+                SELECT
+                    d.codigoreferencia,
+                    d.bodegadestino as codigobodega,
+                    0 as entradas,
+                    SUM(d.cantidad + COALESCE(d.obsequio, 0)) as salidas
+                FROM inventariodetallemovimiento d
+                INNER JOIN inventarioencabezadomovimiento e ON d.iddocumento = e.iddocumento
+                    AND d.prefijodocumento = e.prefijodocumento
+                    AND d.numerodocumento = e.numerodocumento
+                WHERE e.fechadocumento BETWEEN @fechaInicial AND @fechaFinal
+                    AND e.estado = '1'
+                    AND d.iddocumento = 'TR'
+                GROUP BY d.codigoreferencia, d.bodegadestino
+
+                UNION ALL
+
+                -- Cambios de referencia - Entradas
+                SELECT
+                    d.referenciacambio as codigoreferencia,
+                    d.codigobodega,
+                    SUM(d.cantidad + COALESCE(d.obsequio, 0)) as entradas,
+                    0 as salidas
+                FROM inventariodetallemovimiento d
+                INNER JOIN inventarioencabezadomovimiento e ON d.iddocumento = e.iddocumento
+                    AND d.prefijodocumento = e.prefijodocumento
+                    AND d.numerodocumento = e.numerodocumento
+                WHERE e.fechadocumento BETWEEN @fechaInicial AND @fechaFinal
+                    AND e.estado = '1'
+                    AND d.iddocumento = 'TR'
+                    AND d.referenciacambio IS NOT NULL
+                    AND d.referenciacambio <> ''
+                GROUP BY d.referenciacambio, d.codigobodega
+            ) mov ON r.codigoreferencia = mov.codigoreferencia AND b.codigobodega = mov.codigobodega
+            LEFT JOIN (
+                -- C�lculo de costos promedio
+                SELECT
+                    rb.codigoreferencia,
+                    rb.codigobodega,
+                    CASE
+                        WHEN (COALESCE(ts.existenciainicial, 0) + COALESCE(movs.cantidad, 0)) <> 0 THEN
+                            (COALESCE(ts.costopromedioinicial, 0) * COALESCE(ts.existenciainicial, 0) +
+                             COALESCE(movs.valor_total, 0)) /
+                            (COALESCE(ts.existenciainicial, 0) + COALESCE(movs.cantidad, 0))
+                        ELSE 0
+                    END as costopromedio
+                FROM inventarioreferenciasbodega rb
+                LEFT JOIN inventariosaldos ts ON rb.codigoreferencia = ts.codigoreferencia
+                    AND rb.codigobodega = ts.codigobodega
+                    AND ts.anoperiodo = '" + anoperiodo + @"'
+                    AND ts.mesperiodo = '" + mesperiodo + @"'
+                LEFT JOIN (
+                    SELECT
+                        d.codigoreferencia,
+                        d.codigobodega,
+                        SUM(CASE WHEN e.iddocumento IN ('CO', 'IO', 'OE') THEN 1 ELSE -1 END *
+                            (d.cantidad + COALESCE(d.obsequio, 0))) as cantidad,
+                        SUM(CASE WHEN e.iddocumento IN ('CO', 'IO', 'OE') THEN 1 ELSE -1 END *
+                            (d.preciopesos * d.cantidad *
+                             (1 - COALESCE(d.descuentocomercial1detalle, 0) / 100) *
+                             (1 - COALESCE(d.descuentocomercial2detalle, 0) / 100) *
+                             (1 - COALESCE(d.descuentocomercial3detalle, 0) / 100) *
+                             (1 + COALESCE(d.porciva, 0) / 100))) as valor_total
+                    FROM inventariodetallemovimiento d
+                    INNER JOIN inventarioencabezadomovimiento e ON d.iddocumento = e.iddocumento
+                        AND d.prefijodocumento = e.prefijodocumento
+                        AND d.numerodocumento = e.numerodocumento
+                    WHERE e.estado <> '0'
+                        AND (e.iddocumento IN ('CO', 'IO', 'DC') OR
+                             COALESCE(e.idfiscal, 'N') = 'S' OR
+                             COALESCE(e.idniifinv, 'N') = 'S')
+                        AND NOT (e.iddocumento = 'CO' AND '' = 'IO')
+                        AND e.fechadocumento BETWEEN @fechaInicial AND @fechaFinal
+                    GROUP BY d.codigoreferencia, d.codigobodega
+                ) movs ON rb.codigoreferencia = movs.codigoreferencia
+                    AND rb.codigobodega = movs.codigobodega
+            ) costos ON r.codigoreferencia = costos.codigoreferencia
+                AND b.codigobodega = costos.codigobodega
+            LEFT JOIN (
+                -- Precios de venta
+                SELECT
+                    pr.codigoreferencia,
+                    CASE
+                        WHEN COALESCE(pr.valorconiva, 0) <> 0 THEN pr.valorconiva
+                        ELSE pr.valorunitario * (1 + COALESCE(r.tarifaiva, 0) / 100)
+                    END as precio
+                FROM inventariopreciosreferencia pr
+                INNER JOIN inventarioreferencias r ON pr.codigoreferencia = r.codigoreferencia
+                WHERE pr.codigolista = '01' -- Lista de precios principal
+            ) precios ON r.codigoreferencia = precios.codigoreferencia
+            WHERE (COALESCE(saldos.existenciainicial, 0) + COALESCE(mov.entradas, 0) - COALESCE(mov.salidas, 0) <> 0
+                   OR COALESCE(mov.entradas, 0) <> 0
+                   OR COALESCE(mov.salidas, 0) <> 0)";
+
+        // Aplicar filtros seg�n la l�gica original
+        if (!string.IsNullOrEmpty(BodegaInicial))
+            sql += " AND b.codigobodega >= @bodegaInicial";
+        if (!string.IsNullOrEmpty(BodegaFinal))
+            sql += " AND b.codigobodega <= @bodegaFinal";
+
+        if (FiltrarPorDescripcion)
+        {
+            if (!string.IsNullOrEmpty(ReferenciaInicial) || !string.IsNullOrEmpty(ReferenciaFinal))
+            {
+                sql += " AND (";
+                if (!string.IsNullOrEmpty(ReferenciaInicial))
+                    sql += "r.nombrereferencia ILIKE '%' || @referenciaInicial || '%'";
+                if (!string.IsNullOrEmpty(ReferenciaFinal) && ReferenciaFinal != ReferenciaInicial)
+                    sql += " OR r.nombrereferencia ILIKE '%' || @referenciaFinal || '%'";
+                sql += ")";
+            }
+        }
+        else
+        {
+            if (!string.IsNullOrEmpty(ReferenciaInicial))
+                sql += " AND r.codigoreferencia >= @referenciaInicial";
+            if (!string.IsNullOrEmpty(ReferenciaFinal))
+                sql += " AND r.codigoreferencia <= @referenciaFinal";
+        }
+
+        if (!string.IsNullOrEmpty(ClienteInicial))
+            sql += " AND EXISTS (SELECT 1 FROM inventarioencabezadomovimiento e2 WHERE e2.cedula >= @clienteInicial)";
+        if (!string.IsNullOrEmpty(ClienteFinal))
+            sql += " AND EXISTS (SELECT 1 FROM inventarioencabezadomovimiento e2 WHERE e2.cedula <= @clienteFinal)";
+
+        // Filtro por debajo del stock
+        if (PorDebajoStock)
+        {
+            sql += " AND (COALESCE(saldos.existenciainicial, 0) + COALESCE(mov.entradas, 0) - COALESCE(mov.salidas, 0)) < COALESCE(r.stockminimo, 0)";
+        }
+
+        sql += " ORDER BY r.codigoreferencia, b.codigobodega";
+
+        return sql;
+    }
+
+
+
+    private void ToggleExpandReferencia(KardexReferencia referencia)
+    {
+        referencia.Expanded = !referencia.Expanded;
+        StateHasChanged();
+    }
+
+    private void ToggleExpandBodega(KardexBodega bodega)
+    {
+        bodega.Expanded = !bodega.Expanded;
+        StateHasChanged();
+    }
+
+    private void ToggleExpand(KardexItem item)
+    {
+        item.Expanded = !item.Expanded;
+        StateHasChanged();
+    }
+
+    private async Task Export(string format)
+    {
+        try
+        {
+            // Implementar exportaci�n seg�n el formato
+            switch (format.ToLower())
+            {
+                case "excel":
+                    await ExportToExcel();
+                    break;
+                case "csv":
+                    await ExportToCsv();
+                    break;
+                case "pdf":
+                    await ExportToPdf();
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            msgError = $"Error al exportar: {ex.Message}";
+            visibleMessage = true;
+        }
+    }
+
+    private async Task ExportToExcel()
+    {
+        try
+        {
+            // Crear contenido CSV que puede ser abierto en Excel
+            var csvContent = GenerarContenidoCSV();
+
+            // Crear archivo para descarga
+            var fileName = $"Kardex_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+            await DescargarArchivo(csvContent, fileName, "text/csv");
+
+            NotificationService.Notify(NotificationSeverity.Success, "Exportaci�n", $"Datos exportados a {fileName}");
+        }
+        catch (Exception ex)
+        {
+            msgError = $"Error al exportar a Excel: {ex.Message}";
+            visibleMessage = true;
+            NotificationService.Notify(NotificationSeverity.Error, "Error", "Error al exportar a Excel");
+        }
+    }
+
+    private async Task ExportToCsv()
+    {
+        try
+        {
+            var csvContent = GenerarContenidoCSV();
+            var fileName = $"Kardex_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+            await DescargarArchivo(csvContent, fileName, "text/csv");
+
+            NotificationService.Notify(NotificationSeverity.Success, "Exportaci�n", $"Datos exportados a {fileName}");
+        }
+        catch (Exception ex)
+        {
+            msgError = $"Error al exportar a CSV: {ex.Message}";
+            visibleMessage = true;
+            NotificationService.Notify(NotificationSeverity.Error, "Error", "Error al exportar a CSV");
+        }
+    }
+
+    private async Task ExportToPdf()
+    {
+        try
+        {
+            // Generar contenido HTML para PDF
+            var htmlContent = GenerarContenidoHTML();
+
+            // En un escenario real, usar�amos una librer�a como Puppeteer o iTextSharp
+            // Por ahora, descargamos como HTML que puede ser convertido a PDF
+            var fileName = $"Kardex_{DateTime.Now:yyyyMMdd_HHmmss}.html";
+            await DescargarArchivo(htmlContent, fileName, "text/html");
+
+            NotificationService.Notify(NotificationSeverity.Success, "Exportaci�n", $"Datos exportados a {fileName} (convertir a PDF con un navegador)");
+        }
+        catch (Exception ex)
+        {
+            msgError = $"Error al exportar a PDF: {ex.Message}";
+            visibleMessage = true;
+            NotificationService.Notify(NotificationSeverity.Error, "Error", "Error al exportar a PDF");
+        }
+    }
+
+    private string GenerarContenidoCSV()
+    {
+        var csv = new System.Text.StringBuilder();
+
+        // Encabezados
+        csv.AppendLine("C�digo Referencia,Nombre Referencia,C�digo Bodega,Existencia Inicial,Entradas,Salidas,Existencia Final,Costo Promedio,Valor Total,Precio");
+
+        // Datos
+        foreach (var referencia in DatosKardex)
+        {
+            foreach (var bodega in referencia.Bodegas)
+            {
+                csv.AppendLine($"{referencia.CodigoReferencia},{referencia.NombreReferencia},{bodega.CodigoBodega}," +
+                             $"{bodega.ExistenciaInicial},{bodega.Entradas},{bodega.Salidas},{bodega.ExistenciaFinal}," +
+                             $"{bodega.CostoPromedio},{bodega.ValorTotal},{bodega.Precio}");
+
+                // Agregar movimientos detallados si est�n expandidos
+                if (bodega.Expanded && bodega.Movimientos.Any())
+                {
+                    csv.AppendLine(",Movimientos Detallados,,,,,,,,,");
+                    csv.AppendLine(",Fecha,Tipo Doc,N�mero,Tercero,Entradas,Salidas,Saldo,Costo Unitario,Valor Total,Serial");
+
+                    foreach (var mov in bodega.Movimientos)
+                    {
+                        csv.AppendLine($",{mov.Fecha:yyyy-MM-dd},{mov.TipoDocumento},{mov.NumeroDocumento}," +
+                                     $"{mov.Tercero},{mov.Entradas},{mov.Salidas},{mov.Saldo}," +
+                                     $"{mov.CostoUnitario},{mov.ValorTotal},{mov.Serial}");
+                    }
+                }
+            }
+        }
+
+        return csv.ToString();
+    }
+
+    private string GenerarContenidoHTML()
+    {
+        var html = new System.Text.StringBuilder();
+
+        html.AppendLine("<!DOCTYPE html>");
+        html.AppendLine("<html><head><title>Kardex</title>");
+        html.AppendLine("<style>");
+        html.AppendLine("body { font-family: Arial, sans-serif; margin: 20px; }");
+        html.AppendLine("table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }");
+        html.AppendLine("th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }");
+        html.AppendLine("th { background-color: #f2f2f2; }");
+        html.AppendLine("tr:nth-child(even) { background-color: #f9f9f9; }");
+        html.AppendLine(".header { background-color: #4CAF50; color: white; padding: 10px; margin-bottom: 20px; }");
+        html.AppendLine("</style>");
+        html.AppendLine("</head><body>");
+
+        html.AppendLine("<div class='header'>");
+        html.AppendLine("<h1>Informe de Kardex</h1>");
+        html.AppendLine($"<p>Fecha de generaci�n: {DateTime.Now:yyyy-MM-dd HH:mm:ss}</p>");
+        html.AppendLine($"<p>Per�odo: {FechaInicial:yyyy-MM-dd} - {FechaFinal:yyyy-MM-dd}</p>");
+        html.AppendLine("</div>");
+
+        html.AppendLine("<table>");
+        html.AppendLine("<thead>");
+        html.AppendLine("<tr>");
+        html.AppendLine("<th>C�digo</th>");
+        html.AppendLine("<th>Nombre</th>");
+        html.AppendLine("<th>Bodega</th>");
+        html.AppendLine("<th>Exist. Inicial</th>");
+        html.AppendLine("<th>Entradas</th>");
+        html.AppendLine("<th>Salidas</th>");
+        html.AppendLine("<th>Exist. Final</th>");
+        if (MostrarCosto)
+        {
+            html.AppendLine("<th>Costo Promedio</th>");
+            html.AppendLine("<th>Valor Total</th>");
+        }
+        if (MostrarPrecio)
+        {
+            html.AppendLine("<th>Precio</th>");
+        }
+        html.AppendLine("</tr>");
+        html.AppendLine("</thead>");
+        html.AppendLine("<tbody>");
+
+        foreach (var referencia in DatosKardex)
+        {
+            foreach (var bodega in referencia.Bodegas)
+            {
+                html.AppendLine("<tr>");
+                html.AppendLine($"<td>{referencia.CodigoReferencia}</td>");
+                html.AppendLine($"<td>{referencia.NombreReferencia}</td>");
+                html.AppendLine($"<td>{bodega.CodigoBodega}</td>");
+                html.AppendLine($"<td>{bodega.ExistenciaInicial:N2}</td>");
+                html.AppendLine($"<td>{bodega.Entradas:N2}</td>");
+                html.AppendLine($"<td>{bodega.Salidas:N2}</td>");
+                html.AppendLine($"<td>{bodega.ExistenciaFinal:N2}</td>");
+                if (MostrarCosto)
+                {
+                    html.AppendLine($"<td>{bodega.CostoPromedio:N2}</td>");
+                    html.AppendLine($"<td>{bodega.ValorTotal:N2}</td>");
+                }
+                if (MostrarPrecio)
+                {
+                    html.AppendLine($"<td>{bodega.Precio:N2}</td>");
+                }
+                html.AppendLine("</tr>");
+
+                // Movimientos detallados
+                if (bodega.Expanded && bodega.Movimientos.Any())
+                {
+                    html.AppendLine("<tr><td colspan='10' style='background-color: #e8f5e8;'>");
+                    html.AppendLine("<table style='width: 100%; margin-left: 20px;'>");
+                    html.AppendLine("<thead>");
+                    html.AppendLine("<tr style='background-color: #c8e6c9;'>");
+                    html.AppendLine("<th>Fecha</th>");
+                    html.AppendLine("<th>Tipo Doc</th>");
+                    html.AppendLine("<th>N�mero</th>");
+                    html.AppendLine("<th>Tercero</th>");
+                    html.AppendLine("<th>Entradas</th>");
+                    html.AppendLine("<th>Salidas</th>");
+                    html.AppendLine("<th>Saldo</th>");
+                    if (MostrarCosto)
+                    {
+                        html.AppendLine("<th>Costo Unit.</th>");
+                        html.AppendLine("<th>Valor Total</th>");
+                    }
+                    if (MostrarSeriales)
+                    {
+                        html.AppendLine("<th>Serial</th>");
+                    }
+                    html.AppendLine("</tr>");
+                    html.AppendLine("</thead>");
+                    html.AppendLine("<tbody>");
+
+                    foreach (var mov in bodega.Movimientos)
+                    {
+                        html.AppendLine("<tr>");
+                        html.AppendLine($"<td>{mov.Fecha:yyyy-MM-dd}</td>");
+                        html.AppendLine($"<td>{mov.TipoDocumento}</td>");
+                        html.AppendLine($"<td>{mov.NumeroDocumento}</td>");
+                        html.AppendLine($"<td>{mov.Tercero}</td>");
+                        html.AppendLine($"<td>{mov.Entradas:N2}</td>");
+                        html.AppendLine($"<td>{mov.Salidas:N2}</td>");
+                        html.AppendLine($"<td>{mov.Saldo:N2}</td>");
+                        if (MostrarCosto)
+                        {
+                            html.AppendLine($"<td>{mov.CostoUnitario:N2}</td>");
+                            html.AppendLine($"<td>{mov.ValorTotal:N2}</td>");
+                        }
+                        if (MostrarSeriales)
+                        {
+                            html.AppendLine($"<td>{mov.Serial}</td>");
+                        }
+                        html.AppendLine("</tr>");
+                    }
+
+                    html.AppendLine("</tbody></table>");
+                    html.AppendLine("</td></tr>");
+                }
+            }
+        }
+
+        html.AppendLine("</tbody></table>");
+        html.AppendLine("</body></html>");
+
+        return html.ToString();
+    }
+
+    private async Task DescargarArchivo(string contenido, string nombreArchivo, string tipoMime)
+    {
+        // En Blazor Server, podemos usar JavaScript para descargar el archivo
+        var js = $"downloadFile('{System.Web.HttpUtility.JavaScriptStringEncode(contenido)}', '{nombreArchivo}', '{tipoMime}')";
+        await JSRuntime.InvokeVoidAsync("eval", js);
+    }
+
+    // M�todos para el modal de b�squeda integrado
+    private void FiltrarDatosBusqueda()
+    {
+        if (string.IsNullOrWhiteSpace(filtroBusqueda))
+        {
+            datosBusquedaFiltrados = datosBusqueda;
+        }
+        else
+        {
+            datosBusquedaFiltrados = datosBusqueda.Where((ItemModal d) =>
+                d.Codigo.Contains(filtroBusqueda, StringComparison.OrdinalIgnoreCase) ||
+                d.Nombre.Contains(filtroBusqueda, StringComparison.OrdinalIgnoreCase)
+            ).ToList();
+        }
+        StateHasChanged();
+    }
+
+    private void OnRowDoubleClickBusqueda(DataGridRowMouseEventArgs<ItemModal> args)
+    {
+        SeleccionarItemBusqueda(args.Data);
+    }
+
+    private void SeleccionarItemBusqueda(ItemModal item)
+    {
+        AsignarValorCampo(campoActualBusqueda, item.Codigo);
+        CerrarModalBusqueda();
+    }
+
+    private void CerrarModalBusqueda()
+    {
+        mostrarModalBusqueda = false;
+        filtroBusqueda = "";
+        datosBusqueda.Clear();
+        datosBusquedaFiltrados.Clear();
+        StateHasChanged();
+    }
+
+    // Funciones de redondeo replicadas del kardex original
+    private double redondear(double valor, int decimales)
+    {
+        return Math.Floor(valor * Math.Pow(10, decimales) + 0.5) / Math.Pow(10, decimales);
+    }
+
+    private float redondear(float valor, int decimales)
+    {
+        return (float)Math.Floor(valor * Math.Pow(10, decimales) + 0.5) / (float)Math.Pow(10, decimales);
+    }
+
+    private double redondear(double valor)
+    {
+        return Math.Truncate(valor + 0.5);
+    }
+
+    private float redondear(float valor)
+    {
+        return (float)Math.Truncate(valor + 0.5);
+    }
+
+    // Funci�n formar_sql replicada del kardex original
+    private string formar_sql(string fechai, string fechaact)
+    {
+        string sqldespiece = @"
+            SELECT e.IdDocumento,
+                   CASE WHEN e.IdDocumento IN ('CO','OE','DV','AJ','IO','DT') THEN SUM(Cantidaddespiece) ELSE SUM(cantidaddespiece*-1) END as sumita,
+                   d.codigobodega,
+                   d.codigoreferencia
+            FROM InventariodespieceDEtalleMovimiento d
+            INNER JOIN InventarioEncabezadoMovimiento e ON d.IdDocumentodespiece=e.IdDocumento
+                AND d.PrefijoDocumento=e.PrefijoDocumento
+                AND d.NumeroDocumento=e.NumeroDocumento
+            WHERE e.IdDocumento IN ('CO','FV','DV','DC','OE','OS','AJ','TR','IO','DT') AND
+                  NOT ((e.iddocumento='CO' AND ''='IO') OR
+                       (e.iddocumento='FV' AND ''='DV') OR
+                       (e.iddocumento='DT' AND ''='DV')) AND
+                  Estado='1' AND FechaDocumento BETWEEN '" + fechai + @"' AND '" + fechaact + @" 23:59:59'
+            GROUP BY e.IdDocumento, d.codigobodega, d.codigoreferencia
+
+            UNION ALL
+
+            SELECT 'OS' as IdDocumento, SUM(Cantidaddespiece*-1) as sumita, bodegadestino, d.CodigoReferencia
+            FROM InventariodespieceDEtalleMovimiento d
+            INNER JOIN InventarioEncabezadoMovimiento e ON d.IdDocumentodespiece=e.IdDocumento
+                AND d.PrefijoDocumento=e.PrefijoDocumento
+                AND d.NumeroDocumento=e.NumeroDocumento
+            WHERE e.IdDocumento IN ('TR') AND Estado='1' AND FechaDocumento BETWEEN '" + fechai + @"' AND '" + fechaact + @" 23:59:59'
+            GROUP BY bodegadestino, d.CodigoReferencia
+
+            UNION ALL
+
+            SELECT 'OE' as IdDocumento, SUM(Cantidaddespiece) as sumita, codigobodega, referenciacambio
+            FROM InventariodespieceDEtalleMovimiento d
+            INNER JOIN InventarioEncabezadoMovimiento e ON d.IdDocumentodespiece=e.IdDocumento
+                AND d.PrefijoDocumento=e.PrefijoDocumento
+                AND d.NumeroDocumento=e.NumeroDocumento
+            WHERE e.IdDocumento IN ('TR') AND Estado='1' AND FechaDocumento BETWEEN '" + fechai + @"' AND '" + fechaact + @" 23:59:59'
+            GROUP BY codigobodega, referenciacambio";
+
+        string sql = @"
+            SELECT SUM(sumita) as existenciainicial, codigobodega, codigoreferencia FROM (
+                SELECT InventarioDEtalleMovimiento.IdDocumento,
+                       CASE WHEN InventarioDEtalleMovimiento.IdDocumento IN ('CO','OE','DV','AJ','IO','DT') THEN SUM(Cantidad+COALESCE(obsequio,0))
+                            ELSE SUM((cantidad+COALESCE(obsequio,0))*-1) END as sumita,
+                       codigobodega, codigoreferencia
+                FROM InventarioDEtalleMovimiento
+                INNER JOIN InventarioEncabezadoMovimiento ON InventarioDEtalleMovimiento.IdDocumento=InventarioEncabezadoMovimiento.IdDocumento
+                    AND InventarioDEtalleMovimiento.PrefijoDocumento=InventarioEncabezadoMovimiento.PrefijoDocumento
+                    AND InventarioDEtalleMovimiento.NumeroDocumento=InventarioEncabezadoMovimiento.NumeroDocumento
+                WHERE InventarioDEtalleMovimiento.IdDocumento IN ('FV','OE','OS','AJ','DV','DC','CO','TR','IO','DT') AND
+                      NOT ((InventarioDetalleMovimiento.iddocumento='CO' AND ''='IO') OR
+                           (InventarioDetalleMovimiento.iddocumento='FV' AND ''='DV') OR
+                           (InventarioDetalleMovimiento.iddocumento='DT' AND ''='DV')) AND
+                      Estado='1' AND FechaDocumento BETWEEN '" + fechai + @"' AND '" + fechaact + @" 23:59:59'
+                GROUP BY InventarioDEtalleMovimiento.IdDocumento, codigobodega, codigoreferencia
+
+                UNION ALL
+
+                SELECT 'OS' as IdDocumento, SUM((Cantidad+COALESCE(obsequio,0))*-1) as sumita, bodegadestino, codigoreferencia
+                FROM InventarioDEtalleMovimiento
+                INNER JOIN InventarioEncabezadoMovimiento ON InventarioDEtalleMovimiento.IdDocumento=InventarioEncabezadoMovimiento.IdDocumento
+                    AND InventarioDEtalleMovimiento.PrefijoDocumento=InventarioEncabezadoMovimiento.PrefijoDocumento
+                    AND InventarioDEtalleMovimiento.NumeroDocumento=InventarioEncabezadoMovimiento.NumeroDocumento
+                WHERE InventarioDEtalleMovimiento.IdDocumento IN ('TR') AND Estado='1' AND FechaDocumento BETWEEN '" + fechai + @"' AND '" + fechaact + @" 23:59:59'
+                GROUP BY bodegadestino, codigoreferencia
+
+                UNION ALL
+
+                SELECT 'OE' as IdDocumento, SUM(Cantidad+COALESCE(obsequio,0)) as sumita, codigobodega, referenciacambio
+                FROM InventarioDEtalleMovimiento
+                INNER JOIN InventarioEncabezadoMovimiento ON InventarioDEtalleMovimiento.IdDocumento=InventarioEncabezadoMovimiento.IdDocumento
+                    AND InventarioDEtalleMovimiento.PrefijoDocumento=InventarioEncabezadoMovimiento.PrefijoDocumento
+                    AND InventarioDEtalleMovimiento.NumeroDocumento=InventarioEncabezadoMovimiento.NumeroDocumento
+                WHERE InventarioDEtalleMovimiento.IdDocumento IN ('TR') AND Estado='1' AND FechaDocumento BETWEEN '" + fechai + @"' AND '" + fechaact + @" 23:59:59'
+                GROUP BY codigobodega, referenciacambio
+
+                UNION ALL " + sqldespiece + @"
+            ) as t GROUP BY codigobodega, codigoreferencia";
+
+        return sql;
+    }
+
+    // Clases auxiliares
+    public class FormatoOption
+    {
+        public string Value { get; set; } = "";
+        public string Text { get; set; } = "";
+    }
+
+
+
+    public class KardexReferencia
+    {
+        public string CodigoReferencia { get; set; } = "";
+        public string NombreReferencia { get; set; } = "";
+        public bool Expanded { get; set; } = false;
+        public List<KardexBodega> Bodegas { get; set; } = new List<KardexBodega>();
+    }
+
+    public class KardexBodega
+    {
+        public string CodigoBodega { get; set; } = "";
+        public string NombreBodega { get; set; } = "";
+        public decimal ExistenciaInicial { get; set; }
+        public decimal Entradas { get; set; }
+        public decimal Salidas { get; set; }
+        public decimal ExistenciaFinal { get; set; }
+        public decimal CostoPromedio { get; set; }
+        public decimal ValorTotal { get; set; }
+        public decimal Precio { get; set; }
+        public bool Expanded { get; set; } = false;
+        public List<MovimientoKardex> Movimientos { get; set; } = new List<MovimientoKardex>();
+    }
+
+    public class KardexItem
+    {
+        public string CodigoReferencia { get; set; } = "";
+        public string NombreReferencia { get; set; } = "";
+        public string CodigoBodega { get; set; } = "";
+        public decimal ExistenciaInicial { get; set; }
+        public decimal Entradas { get; set; }
+        public decimal Salidas { get; set; }
+        public decimal ExistenciaFinal { get; set; }
+        public decimal CostoPromedio { get; set; }
+        public decimal ValorTotal { get; set; }
+        public decimal Precio { get; set; }
+        public bool Expanded { get; set; } = false;
+        public List<MovimientoKardex> Movimientos { get; set; } = new List<MovimientoKardex>();
+    }
+
+    public class MovimientoKardex
+    {
+        public DateTime Fecha { get; set; }
+        public string TipoDocumento { get; set; } = "";
+        public string NumeroDocumento { get; set; } = "";
+        public string Tercero { get; set; } = "";
+        public decimal Entradas { get; set; }
+        public decimal Salidas { get; set; }
+        public decimal Saldo { get; set; }
+        public decimal CostoUnitario { get; set; }
+        public decimal ValorTotal { get; set; }
+        public string Serial { get; set; } = "";
+    }
+
+    public class ItemModal
+    {
+        public string Codigo { get; set; } = "";
+        public string Nombre { get; set; } = "";
+    }
+
+    // M�todos adicionales para replicar funcionalidades del kardex original
+
+    private async Task<List<KardexItem>> CargarKardexPorCliente(NpgsqlConnection connection)
+    {
+        var datosCliente = new List<KardexItem>();
+
+        try
+        {
+            // Consulta para formato por cliente (similar al original)
+            string sql = @"
+                SELECT
+                    t.cedula as codigoreferencia,
+                    t.nombrecompleto as nombrereferencia,
+                    '' as codigobodega,
+                    0 as existenciainicial,
+                    SUM(CASE WHEN e.iddocumento IN ('FV','DC') THEN d.cantidad + COALESCE(d.obsequio, 0) ELSE 0 END) as entradas,
+                    0 as salidas,
+                    SUM(CASE WHEN e.iddocumento IN ('FV','DC') THEN d.cantidad + COALESCE(d.obsequio, 0) ELSE 0 END) as existenciafinal,
+                    AVG(d.preciopesos) as costopromedio,
+                    AVG(d.preciopesos) as precio
+                FROM inventariodetallemovimiento d
+                INNER JOIN inventarioencabezadomovimiento e ON d.iddocumento = e.iddocumento
+                    AND d.prefijodocumento = e.prefijodocumento
+                    AND d.numerodocumento = e.numerodocumento
+                INNER JOIN uterceros t ON e.cedula = t.cedula AND e.sucursal = t.sucursal
+                WHERE e.fechadocumento BETWEEN @fechaInicial AND @fechaFinal
+                    AND e.estado = '1'
+                    AND e.iddocumento IN ('FV','DC')";
+
+            // Aplicar filtros de cliente
+            if (!string.IsNullOrEmpty(ClienteInicial))
+                sql += " AND t.cedula >= @clienteInicial";
+            if (!string.IsNullOrEmpty(ClienteFinal))
+                sql += " AND t.cedula <= @clienteFinal";
+
+            sql += " GROUP BY t.cedula, t.nombrecompleto ORDER BY t.cedula";
+
+            using (var cmd = new NpgsqlCommand(sql, connection))
+            {
+                cmd.Parameters.Add("@fechaInicial", NpgsqlDbType.Varchar).Value = FechaInicial.ToString("yyyy-MM-dd");
+                cmd.Parameters.Add("@fechaFinal", NpgsqlDbType.Varchar).Value = FechaFinal.ToString("yyyy-MM-dd");
+
+                if (!string.IsNullOrEmpty(ClienteInicial))
+                    cmd.Parameters.Add("@clienteInicial", NpgsqlDbType.Varchar).Value = ClienteInicial;
+                if (!string.IsNullOrEmpty(ClienteFinal))
+                    cmd.Parameters.Add("@clienteFinal", NpgsqlDbType.Varchar).Value = ClienteFinal;
+
+                using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        var item = new KardexItem
+                        {
+                            CodigoReferencia = reader["codigoreferencia"]?.ToString() ?? "",
+                            NombreReferencia = reader["nombrereferencia"]?.ToString() ?? "",
+                            CodigoBodega = reader["codigobodega"]?.ToString() ?? "",
+                            ExistenciaInicial = Convert.ToDecimal(reader["existenciainicial"] ?? 0),
+                            Entradas = Convert.ToDecimal(reader["entradas"] ?? 0),
+                            Salidas = Convert.ToDecimal(reader["salidas"] ?? 0),
+                            ExistenciaFinal = Convert.ToDecimal(reader["existenciafinal"] ?? 0),
+                            CostoPromedio = Convert.ToDecimal(reader["costopromedio"] ?? 0),
+                            Precio = Convert.ToDecimal(reader["precio"] ?? 0)
+                        };
+
+                        item.ValorTotal = item.ExistenciaFinal * item.CostoPromedio;
+
+                        // Cargar movimientos detallados para el cliente
+                        item.Movimientos = await CargarMovimientosCliente(connection, item.CodigoReferencia);
+
+                        datosCliente.Add(item);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading client kardex: {ex.Message}");
+        }
+
+        return datosCliente;
+    }
+
+    private async Task<List<MovimientoKardex>> CargarMovimientosCliente(NpgsqlConnection connection, string cedula)
+    {
+        var movimientos = new List<MovimientoKardex>();
+
+        try
+        {
+            string sql = @"
+                SELECT
+                    e.fechadocumento as fecha,
+                    e.iddocumento as tipodocumento,
+                    e.prefijodocumento || '-' || e.numerodocumento as numerodocumento,
+                    r.nombrereferencia as tercero,
+                    SUM(d.cantidad + COALESCE(d.obsequio, 0)) as cantidad,
+                    AVG(d.preciopesos) as costounitario
+                FROM inventariodetallemovimiento d
+                INNER JOIN inventarioencabezadomovimiento e ON d.iddocumento = e.iddocumento
+                    AND d.prefijodocumento = e.prefijodocumento
+                    AND d.numerodocumento = e.numerodocumento
+                INNER JOIN inventarioreferencias r ON d.codigoreferencia = r.codigoreferencia
+                WHERE e.cedula = @cedula
+                    AND e.fechadocumento BETWEEN @fechaInicial AND @fechaFinal
+                    AND e.estado = '1'
+                    AND e.iddocumento IN ('FV','DC')
+                GROUP BY e.fechadocumento, e.iddocumento, e.prefijodocumento, e.numerodocumento, r.nombrereferencia
+                ORDER BY e.fechadocumento, e.numerodocumento";
+
+            using (var cmd = new NpgsqlCommand(sql, connection))
+            {
+                cmd.Parameters.Add("@cedula", NpgsqlDbType.Varchar).Value = cedula;
+                cmd.Parameters.Add("@fechaInicial", NpgsqlDbType.Varchar).Value = FechaInicial.ToString("yyyy-MM-dd");
+                cmd.Parameters.Add("@fechaFinal", NpgsqlDbType.Varchar).Value = FechaFinal.ToString("yyyy-MM-dd");
+
+                using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    decimal saldoAcumulado = 0;
+
+                    while (await reader.ReadAsync())
+                    {
+                        var cantidad = Convert.ToDecimal(reader["cantidad"]);
+                        saldoAcumulado += cantidad;
+
+                        movimientos.Add(new MovimientoKardex
+                        {
+                            Fecha = Convert.ToDateTime(reader["fecha"]),
+                            TipoDocumento = reader["tipodocumento"].ToString(),
+                            NumeroDocumento = reader["numerodocumento"].ToString(),
+                            Tercero = reader["tercero"].ToString(),
+                            Entradas = cantidad,
+                            Salidas = 0,
+                            Saldo = saldoAcumulado,
+                            CostoUnitario = Convert.ToDecimal(reader["costounitario"] ?? 0),
+                            ValorTotal = saldoAcumulado * Convert.ToDecimal(reader["costounitario"] ?? 0),
+                            Serial = ""
+                        });
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading client movements: {ex.Message}");
+        }
+
+        return movimientos;
+    }
+
+    private async Task<List<MovimientoKardex>> CargarSerialesDetalle(NpgsqlConnection connection, string codigoReferencia, string tipoDoc, string prefijo, string numero, string item)
+    {
+        var seriales = new List<MovimientoKardex>();
+
+        if (!MostrarSeriales) return seriales;
+
+        try
+        {
+            string sql = @"
+                SELECT
+                    d.serialdespiece,
+                    s.colorserial,
+                    c.descripcioncolor,
+                    d.cantidaddespiece
+                FROM inventariodespiecedetallemovimiento d
+                INNER JOIN produccionseriales s ON d.serialdespiece = s.serial
+                LEFT JOIN inventariocolores c ON c.codigocolor = s.colorserial
+                WHERE d.iddocumentodespiece = @tipoDoc
+                    AND d.prefijodocumento = @prefijo
+                    AND d.numerodocumento = @numero
+                    AND d.itemdespiece = @item";
+
+            using (var cmd = new NpgsqlCommand(sql, connection))
+            {
+                cmd.Parameters.Add("@tipoDoc", NpgsqlDbType.Varchar).Value = tipoDoc;
+                cmd.Parameters.Add("@prefijo", NpgsqlDbType.Varchar).Value = prefijo;
+                cmd.Parameters.Add("@numero", NpgsqlDbType.Varchar).Value = numero;
+                cmd.Parameters.Add("@item", NpgsqlDbType.Varchar).Value = item;
+
+                using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        seriales.Add(new MovimientoKardex
+                        {
+                            Serial = reader["serialdespiece"]?.ToString() ?? "",
+                            Entradas = Convert.ToDecimal(reader["cantidaddespiece"] ?? 0),
+                            Tercero = $"Color: {reader["colorserial"]} - {reader["descripcioncolor"]}"
+                        });
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading serials: {ex.Message}");
+        }
+
+        return seriales;
+    }
+
+    private async Task CargarParametrosGlobales(NpgsqlConnection connection)
+    {
+        try
+        {
+            // Cargar par�metros globales como en el kardex original
+            string sql = @"
+                SELECT variable, valorvariable
+                FROM uparametrosglobales
+                WHERE variable IN (
+                    'fechai_inventario_despacho',
+                    'activar_inventario_despacho',
+                    'bodega_inventario_despacho',
+                    'bloquear_inventario_despacho',
+                    'mesi_inventario_despacho',
+                    'yeari_inventario_despacho'
+                )";
+
+            using (var cmd = new NpgsqlCommand(sql, connection))
+            using (var reader = await cmd.ExecuteReaderAsync())
+            {
+                while (await reader.ReadAsync())
+                {
+                    var variable = reader["variable"]?.ToString();
+                    var valor = reader["valorvariable"]?.ToString();
+
+                    // Procesar par�metros seg�n sea necesario
+                    switch (variable)
+                    {
+                        case "fechai_inventario_despacho":
+                            if (!string.IsNullOrEmpty(valor) && DateTime.TryParse(valor, out DateTime fechaInventario))
+                            {
+                                primerafechakardex = valor;
+                            }
+                            break;
+                        case "bodega_inventario_despacho":
+                            if (!string.IsNullOrEmpty(valor))
+                            {
+                                // Configurar bodega por defecto
+                                if (string.IsNullOrEmpty(BodegaInicial))
+                                    BodegaInicial = valor;
+                                if (string.IsNullOrEmpty(BodegaFinal))
+                                    BodegaFinal = valor;
+                            }
+                            break;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading global parameters: {ex.Message}");
+        }
+    }
+
+    // Funci�n sqlcosto para c�lculo de costos promedio ponderado
+    private string sqlcosto(string fechai, string fechaact, string anoperiodo, string mesperiodo)
+    {
+        string sqli = "";
+        if (!string.IsNullOrEmpty(primerafechakardex))
+            sqli = "fechadocumento>='" + primerafechakardex + "' and ";
+
+        string sqlcosto = @"
+            SELECT codigobodega, codigoreferencia,
+                   AVG(preciopesos) as preciopesos,
+                   MAX(existenciainicial) as existenciainicial
+            FROM (
+                SELECT rb.codigobodega, rb.codigoreferencia,
+                       SUM(" + xnull + @"existenciainicial, 0) + " + xnull + @"cantidad, 0)) as cantidad,
+                       CASE WHEN SUM(" + xnull + @"existenciainicial, 0) + " + xnull + @"cantidad, 0)) <> 0 THEN
+                           SUM(" + xnull + @"costopromedioinicial, 0) * " + xnull + @"existenciainicial, 0) +
+                           " + xnull + @"t0.preciopesos, 0)) /
+                           SUM(" + xnull + @"existenciainicial, 0) + " + xnull + @"cantidad, 0))
+                       ELSE 0 END AS preciopesos,
+                       MAX(existenciainicial) as existenciainicial,
+                       MAX(costopromedioinicial) as costopromedioinicial
+                FROM inventarioreferenciasbodega as rb
+                LEFT JOIN (
+                    SELECT codigobodega, codigoreferencia,
+                           SUM(cantidad * signo) as cantidad,
+                           SUM(preciopesos * signo) as preciopesos
+                    FROM (
+                        SELECT InventarioencabezadoMovimiento.IdDocumento, d.Codigobodega, d.Codigoreferencia,
+                               SUM(d.cantidad+" + sqlobs + @") as cantidad,
+                               CASE WHEN InventarioencabezadoMovimiento.IdDocumento IN ('CO', 'IO', 'OE') THEN 1 ELSE -1 END as signo,
+                               SUM((preciopesos * d.cantidad * (1 - " + xnull + @"descuentocomercial1detalle, 0) / 100) *
+                                    (1 - " + xnull + @"descuentocomercial2detalle, 0) / 100) *
+                                    (1 - " + xnull + @"descuentocomercial3detalle, 0) / 100) *
+                                    (1 + " + xnull + @"porciva, 0) / 100)) +
+                                    cantidad * tarifaconsumo + cantidad * valorimpuestoconsumo / 100) as preciopesos
+                        FROM InventarioEncabezadoMovimiento
+                        INNER JOIN InventarioDetalleMovimiento as d ON InventarioEncabezadoMovimiento.IdDocumento = d.IdDocumento
+                            AND InventarioEncabezadoMovimiento.CodigoTipoDocumento = d.CodigoTipoDocumento
+                            AND InventarioEncabezadoMovimiento.PrefijoDocumento = d.PrefijoDocumento
+                            AND InventarioEncabezadoMovimiento.NumeroDocumento = d.NumeroDocumento
+                        WHERE InventarioEncabezadoMovimiento.Estado <> '0' AND
+                              (InventarioEncabezadoMovimiento.IdDocumento IN ('CO', 'IO', 'DC') OR
+                               " + trampafiscal + @" = 'S' OR " + trampaniif + @" = 'S') AND
+                              NOT (InventarioEncabezadoMovimiento.IdDocumento = 'CO' AND " + xtipb + @" = 'IO') AND
+                              " + sqli + @"FechaDocumento BETWEEN '" + fechai + @"' AND '" + fechaact + @" 23:59:59'
+                        GROUP BY InventarioencabezadoMovimiento.IdDocumento, d.Codigobodega, d.codigoreferencia
+                    ) as t0
+                    GROUP BY codigobodega, codigoreferencia
+                ) as t0 ON rb.codigobodega = t0.codigobodega AND rb.codigoreferencia = t0.codigoreferencia
+                LEFT JOIN inventariosaldos as ts ON ts.codigobodega = rb.codigobodega AND ts.codigoreferencia = rb.codigoreferencia
+                    AND anoperiodo = '" + anoperiodo + @"' AND mesperiodo = '" + mesperiodo + @"'
+                GROUP BY rb.codigobodega, rb.codigoreferencia
+
+                UNION ALL
+
+                SELECT rb.codigobodega, referencia,
+                       SUM(" + xnull + @"existenciainicial, 0) + " + xnull + @"sd.cantidad, 0)) as cantidad,
+                       CASE WHEN SUM(" + xnull + @"existenciainicial, 0) + " + xnull + @"sd.cantidad, 0)) <> 0 THEN
+                           SUM(((" + xnull + @"costopromedioinicial, 0) * " + xnull + @"existenciainicial, 0) +
+                               " + xnull + @"sd.preciopesos, 0)) /
+                               (" + xnull + @"existenciainicial, 0) + " + xnull + @"sd.cantidad, 0))) *
+                               porcentajecosto / 100)
+                       ELSE 0 END AS preciopesos,
+                       MAX(existenciainicial) as existenciainicial,
+                       MAX(costopromedioinicial) as costopromedioinicial
+                FROM inventariodespiece as d
+                INNER JOIN inventarioreferenciasbodega as rb ON rb.codigoreferencia = d.referenciahijo
+                INNER JOIN (
+                    SELECT codigobodega, codigoreferencia,
+                           SUM(cantidad * signo) as cantidad,
+                           SUM(preciopesos * signo) as preciopesos
+                    FROM (
+                        SELECT InventarioencabezadoMovimiento.IdDocumento, d.Codigobodega, d.Codigoreferencia,
+                               SUM(d.cantidad+" + sqlobs + @") as cantidad,
+                               CASE WHEN InventarioencabezadoMovimiento.IdDocumento IN ('CO', 'IO', 'OE') THEN 1 ELSE -1 END as signo,
+                               SUM((preciopesos * d.cantidad * (1 - " + xnull + @"descuentocomercial1detalle, 0) / 100) *
+                                    (1 - " + xnull + @"descuentocomercial2detalle, 0) / 100) *
+                                    (1 - " + xnull + @"descuentocomercial3detalle, 0) / 100) *
+                                    (1 + " + xnull + @"porciva, 0) / 100)) +
+                                    cantidad * tarifaconsumo + cantidad * valorimpuestoconsumo / 100) as preciopesos
+                        FROM InventarioEncabezadoMovimiento
+                        INNER JOIN InventarioDetalleMovimiento as d ON InventarioEncabezadoMovimiento.IdDocumento = d.IdDocumento
+                            AND InventarioEncabezadoMovimiento.CodigoTipoDocumento = d.CodigoTipoDocumento
+                            AND InventarioEncabezadoMovimiento.PrefijoDocumento = d.PrefijoDocumento
+                            AND InventarioEncabezadoMovimiento.NumeroDocumento = d.NumeroDocumento
+                        WHERE InventarioencabezadoMovimiento.Estado <> '0' AND
+                              (InventarioencabezadoMovimiento.IdDocumento IN ('CO', 'IO', 'DC') OR
+                               " + trampafiscal + @" = 'S' OR " + trampaniif + @" = 'S') AND
+                              NOT (InventarioencabezadoMovimiento.IdDocumento = 'CO' AND " + xtipb + @" = 'IO') AND
+                              " + sqli + @"FechaDocumento BETWEEN '" + fechai + @"' AND '" + fechaact + @" 23:59:59' AND
+                              d.codigoreferencia IN (SELECT referenciahijo FROM inventariodespiece)
+                        GROUP BY InventarioencabezadoMovimiento.IdDocumento, d.Codigobodega, d.codigoreferencia
+                    ) as t0
+                    GROUP BY codigobodega, codigoreferencia
+                ) as sd ON sd.codigoreferencia = d.referenciahijo AND sd.codigobodega = rb.codigobodega
+                LEFT JOIN inventariosaldos as ts ON ts.codigobodega = sd.codigobodega AND ts.codigoreferencia = sd.codigoreferencia
+                    AND anoperiodo = '" + anoperiodo + @"' AND mesperiodo = '" + mesperiodo + @"'
+                WHERE " + xnull + @"sd.codigobodega,'') <> ''
+                GROUP BY rb.codigobodega, referencia
+            ) as tu
+            WHERE preciopesos <> 0
+            GROUP BY codigobodega, codigoreferencia";
+
+        return sqlcosto;
+    }
+
+    // Funci�n para cargar seriales con colores
+    private async Task<List<MovimientoKardex>> CargarSerialesConColores(NpgsqlConnection connection, string codigoReferencia, string tipoDoc, string prefijo, string numero, string item)
+    {
+        var seriales = new List<MovimientoKardex>();
+
+        if (!MostrarSeriales) return seriales;
+
+        try
+        {
+            string sql = @"
+                SELECT
+                    d.serialdespiece,
+                    s.colorserial,
+                    " + xnull + @"c.descripcioncolor, '') as descripcioncolor,
+                    d.cantidaddespiece
+                FROM inventariodespiecedetallemovimiento d
+                INNER JOIN produccionseriales s ON d.serialdespiece = s.serial
+                LEFT JOIN inventariocolores c ON c.codigocolor = s.colorserial
+                WHERE d.iddocumentodespiece = @tipoDoc
+                    AND d.prefijodocumento = @prefijo
+                    AND d.numerodocumento = @numero
+                    AND d.itemdespiece = @item";
+
+            using (var cmd = new NpgsqlCommand(sql, connection))
+            {
+                cmd.Parameters.Add("@tipoDoc", NpgsqlDbType.Varchar).Value = tipoDoc;
+                cmd.Parameters.Add("@prefijo", NpgsqlDbType.Varchar).Value = prefijo;
+                cmd.Parameters.Add("@numero", NpgsqlDbType.Varchar).Value = numero;
+                cmd.Parameters.Add("@item", NpgsqlDbType.Varchar).Value = item;
+
+                using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        seriales.Add(new MovimientoKardex
+                        {
+                            Serial = reader["serialdespiece"]?.ToString() ?? "",
+                            Entradas = Convert.ToDecimal(reader["cantidaddespiece"] ?? 0),
+                            Salidas = 0,
+                            Saldo = Convert.ToDecimal(reader["cantidaddespiece"] ?? 0),
+                            CostoUnitario = 0,
+                            ValorTotal = 0,
+                            Tercero = $"Color: {reader["colorserial"]} - {reader["descripcioncolor"]}"
+                        });
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading serials with colors: {ex.Message}");
+        }
+
+        return seriales;
+    }
+
+    // Funci�n para determinar si usar NIIF o Fiscal
+    private string DeterminarTipoCosto()
+    {
+        // L�gica para determinar si usar costo NIIF o fiscal
+        // Por defecto usar costo promedio, pero se puede cambiar seg�n configuraci�n
+        return xcosto;
+    }
+}
+
+<script>
+    function downloadFile(content, filename, mimeType) {
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+</script>
+

@@ -1,0 +1,1902 @@
+﻿@page "/Basicos/ModeloBasicoFactura80"
+@using Syncfusion.Blazor.RichTextEditor
+@using Syncfusion.Blazor.Buttons
+@using Syncfusion.Blazor.Popups
+@using Microsoft.JSInterop
+@using System.IO
+@using System.Text
+@using System.Net.Http
+@using Syncfusion.XlsIO
+@using Syncfusion.Drawing
+@using Syncfusion.Pdf.Parsing
+@using Syncfusion.Pdf
+@using Syncfusion.Pdf.Graphics
+@using Syncfusion.Pdf.Grid
+@using Syncfusion.Pdf.Interactive
+@using Microsoft.AspNetCore.Components.Forms
+@inject IJSRuntime JSRuntime
+@inject HttpClient HttpClient
+@inject NotificationService NotificationService
+
+<div class="control-section">
+    <div class="col-lg-12">
+        <h2>Editor de Factura</h2>
+        <div class="mt-3 export-options">
+            <h4>Opciones de Exportación</h4>
+            <div class="d-flex flex-wrap">
+                <SfButton @onclick="ExportToPdf" CssClass="e-btn mr-2 mb-2">Exportar a PDF</SfButton>
+                <SfButton @onclick="PrintDocument" CssClass="e-btn mr-2 mb-2">Imprimir</SfButton>
+                <InputFile OnChange="OnInputFileChange" id="fileUpload" hidden />
+                <SfButton OnClick="TriggerFileUpload" CssClass="e-btn mr-2 mb-2">Importar Word</SfButton>
+
+                <div class="format-selector">
+                    <span>Formato de Papel:</span>
+                    <select class="e-btn mr-2 mb-2" value="@CurrentPaperFormat" @onchange="OnPaperFormatChange">
+                        <option value="a4-v">A4 - Vertical</option>
+                        <option value="a4-h">A4 - Horizontal</option>
+                        <option value="ticket-80">Ticket 80mm</option>
+                        <option value="ticket-58">Ticket 58mm</option>
+                        <option value="letter-v">Carta - Vertical</option>
+                        <option value="letter-h">Carta - Horizontal</option>
+                        <option value="legal-v">Legal - Vertical (13")</option>
+                        <option value="legal-h">Legal - Horizontal (13")</option>
+                        <option value="folio-v">Folio - Vertical (12")</option>
+                        <option value="folio-h">Folio - Horizontal (12")</option>
+                        <option value="pos-80">POS 80mm</option>
+                    </select>
+                </div>
+
+                <div class="logo-selector mt-2">
+                    <span>Logo de la Empresa:</span>
+                    <input type="text" @bind="LogoUrl"
+                           placeholder="https://ejemplo.com/logo.png"
+                           class="form-control mr-2 mb-2" style="width: 300px; display: inline-block;" />
+                    <SfButton @onclick="UpdateLogo" CssClass="e-btn mr-2 mb-2">Actualizar Logo</SfButton>
+                </div>
+            </div>
+
+            <div class="format-info mt-2">
+                <p>Formato actual: <strong>@GetFormatName(CurrentPaperFormat)</strong></p>
+                <p class="format-description">@GetFormatDescription(CurrentPaperFormat)</p>
+                @if (!string.IsNullOrEmpty(LogoUrl))
+                {
+                    <p style="color: #28a745; font-size: 0.85em;">
+                        <i class="fas fa-check-circle"></i> Logo configurado: @(LogoUrl.Length > 50 ? LogoUrl.Substring(0, 50) + "..." : LogoUrl)
+                    </p>
+                }
+                else
+                {
+                    <p style="color: #6c757d; font-size: 0.85em;">
+                        <i class="fas fa-info-circle"></i> Sin logo configurado
+                    </p>
+                }
+            </div>
+        </div>
+
+        <SfRichTextEditor @ref="RteObj" Height="500px" Width="100%" @bind-Value="@EditorContent"
+                          Placeholder="Edite su factura aquí..." EnableResize="true">
+            <RichTextEditorToolbarSettings Items="@Tools" Type="ToolbarType.Expand"></RichTextEditorToolbarSettings>
+            <RichTextEditorEvents ValueChange="OnValueChange" Created="OnEditorCreated" />
+        </SfRichTextEditor>
+
+
+    </div>
+</div>
+
+<style>
+    .factura-template {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+        max-width: 100%;
+        margin: 0 auto;
+    }
+
+    .factura-header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+
+    .cliente-info {
+        margin-bottom: 20px;
+    }
+
+    .totals {
+        text-align: right;
+        margin-top: 20px;
+    }
+
+    .export-options {
+        margin-top: 20px;
+        padding: 15px;
+        background-color: #f5f5f5;
+        border-radius: 5px;
+    }
+
+    .format-info {
+        margin-top: 10px;
+        font-size: 0.9em;
+        color: #555;
+    }
+
+    .format-description {
+        font-style: italic;
+    }
+
+    .mr-2 {
+        margin-right: 10px;
+    }
+
+    .mb-2 {
+        margin-bottom: 10px;
+    }
+
+    .mt-2 {
+        margin-top: 10px;
+    }
+
+    .d-flex {
+        display: flex;
+    }
+
+    .flex-wrap {
+        flex-wrap: wrap;
+    }
+
+    /* Estilos específicos para cada formato de papel */
+    .format-a4-v .factura-template {
+        width: 210mm;
+        min-height: 297mm;
+    }
+
+    .format-a4-h .factura-template {
+        width: 297mm;
+        min-height: 210mm;
+    }
+
+    .format-ticket-80 .factura-template {
+        width: 80mm;
+        font-size: 0.8em;
+    }
+
+    .format-ticket-80 table {
+        font-size: 0.9em;
+    }
+
+    .format-ticket-58 .factura-template {
+        width: 58mm;
+        font-size: 0.7em;
+    }
+
+    .format-ticket-58 table {
+        font-size: 0.8em;
+    }
+
+    .format-letter-v .factura-template {
+        width: 216mm;
+        min-height: 279mm;
+    }
+
+    .format-letter-h .factura-template {
+        width: 279mm;
+        min-height: 216mm;
+    }
+
+    .format-legal-v .factura-template {
+        width: 216mm;
+        min-height: 330mm;
+    }
+
+    .format-legal-h .factura-template {
+        width: 330mm;
+        min-height: 216mm;
+    }
+
+    .format-folio-v .factura-template {
+        width: 216mm;
+        min-height: 305mm;
+    }
+
+    .format-folio-h .factura-template {
+        width: 305mm;
+        min-height: 216mm;
+    }
+
+    .format-pos-80 .factura-template {
+        width: 80mm;
+        font-size: 0.8em;
+    }
+
+    .format-pos-80 table {
+        font-size: 0.9em;
+    }
+
+    /* Estilos para el diseño flex de información del paciente */
+    .patient-info-flex {
+        display: flex;
+        width: 100%;
+        border: 1px solid #000;
+    }
+
+    .patient-info-column {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .patient-info-row {
+        display: flex;
+        border-bottom: 1px solid #000;
+    }
+
+        .patient-info-row:last-child {
+            border-bottom: none;
+        }
+
+    .patient-info-label {
+        padding: 4px;
+        background-color: #f0f0f0;
+        font-weight: bold;
+        border-right: 1px solid #000;
+    }
+
+    .patient-info-value {
+        padding: 4px;
+        border-right: 1px solid #000;
+    }
+
+        .patient-info-value:last-child {
+            border-right: none;
+        }
+
+    /* Ajustes responsivos para formatos pequeños */
+    .format-ticket-58 .patient-info-flex,
+    .format-ticket-80 .patient-info-flex,
+    .format-pos-80 .patient-info-flex {
+        flex-direction: column;
+    }
+
+    .format-ticket-58 .patient-info-column,
+    .format-ticket-80 .patient-info-column,
+    .format-pos-80 .patient-info-column {
+        border-right: none;
+        border-bottom: 1px solid #000;
+    }
+
+        .format-ticket-58 .patient-info-column:last-child,
+        .format-ticket-80 .patient-info-column:last-child,
+        .format-pos-80 .patient-info-column:last-child {
+            border-bottom: none;
+        }
+
+    .logo-selector {
+        margin-top: 10px;
+        padding: 10px;
+        background-color: #f0f8ff;
+        border-radius: 5px;
+        border-left: 4px solid #2c5aa0;
+    }
+
+        .logo-selector span {
+            font-weight: bold;
+            color: #2c5aa0;
+            margin-right: 10px;
+        }
+
+    .form-control {
+        padding: 5px 10px;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+        font-size: 14px;
+    }
+
+        .form-control:focus {
+            border-color: #2c5aa0;
+            outline: none;
+            box-shadow: 0 0 5px rgba(44, 90, 160, 0.3);
+        }
+</style>
+
+@code {
+    private SfRichTextEditor RteObj;
+    private List<ToolbarItemModel> Tools = new List<ToolbarItemModel>()
+    {
+        new ToolbarItemModel() { Command = ToolbarCommand.Bold },
+        new ToolbarItemModel() { Command = ToolbarCommand.Italic },
+        new ToolbarItemModel() { Command = ToolbarCommand.Underline },
+        new ToolbarItemModel() { Command = ToolbarCommand.Separator },
+        new ToolbarItemModel() { Command = ToolbarCommand.FontName },
+        new ToolbarItemModel() { Command = ToolbarCommand.FontSize },
+        new ToolbarItemModel() { Command = ToolbarCommand.FontColor },
+        new ToolbarItemModel() { Command = ToolbarCommand.BackgroundColor },
+        new ToolbarItemModel() { Command = ToolbarCommand.Separator },
+        new ToolbarItemModel() { Command = ToolbarCommand.Alignments },
+        new ToolbarItemModel() { Command = ToolbarCommand.Separator },
+        new ToolbarItemModel() { Command = ToolbarCommand.CreateTable },
+        new ToolbarItemModel() { Command = ToolbarCommand.Image },
+        new ToolbarItemModel() { Command = ToolbarCommand.Separator },
+        new ToolbarItemModel() { Command = ToolbarCommand.Undo },
+        new ToolbarItemModel() { Command = ToolbarCommand.Redo },
+        new ToolbarItemModel() { Command = ToolbarCommand.Separator },
+        new ToolbarItemModel() { Command = ToolbarCommand.Print }
+    };
+
+    private string CurrentPaperFormat { get; set; } = "a4-v";
+    private string EditorContent { get; set; } = "";
+    private IBrowserFile selectedFile;
+    private string LogoUrl { get; set; } = "https://www.perote.tecnm.mx/img/Gestion2020.png";
+
+    private async Task TriggerFileUpload()
+    {
+        await JSRuntime.InvokeVoidAsync("triggerClick", "fileUpload");
+    }
+
+    private async Task UpdateLogo()
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(LogoUrl))
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Warning,
+                    Summary = "URL requerida",
+                    Detail = "Por favor ingrese una URL válida para el logo",
+                    Duration = 3000
+                });
+                return;
+            }
+
+            // Validar que la URL sea válida
+            if (!Uri.TryCreate(LogoUrl, UriKind.Absolute, out _))
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "URL inválida",
+                    Detail = "La URL del logo no es válida",
+                    Duration = 4000
+                });
+                return;
+            }
+
+            // Actualizar el contenido del editor con el nuevo logo
+            EditorContent = InitialInvoiceTemplate;
+            StateHasChanged();
+
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = "Logo actualizado",
+                Detail = "El logo se ha actualizado correctamente en la factura",
+                Duration = 4000
+            });
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error al actualizar logo",
+                Detail = $"No se pudo actualizar el logo: {ex.Message}",
+                Duration = 5000
+            });
+        }
+    }
+
+
+
+    private string GetLogoHtml()
+    {
+        if (string.IsNullOrEmpty(LogoUrl))
+            return "";
+
+        var logoSize = GetLogoSizeForFormat(CurrentPaperFormat);
+        return $@"<img src='{LogoUrl}' alt='Logo de la empresa'
+                     style='max-width: {logoSize.Width}px; max-height: {logoSize.Height}px;
+                            width: auto; height: auto; margin-bottom: 10px;
+                            border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'
+                     onerror='this.style.display=""none""' />";
+    }
+
+    private (int Width, int Height) GetLogoSizeForFormat(string format)
+    {
+        return format switch
+        {
+            "ticket-58" => (120, 60),
+            "ticket-80" or "pos-80" => (150, 75),
+            "legal-v" or "legal-h" => (200, 100),
+            "folio-v" or "folio-h" => (180, 90),
+            _ => (160, 80)
+        };
+    }
+
+    private async Task OnInputFileChange(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+        if (selectedFile != null)
+        {
+            try
+            {
+                // Mostrar notificación de inicio
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Info,
+                    Summary = "Importando archivo",
+                    Detail = "Procesando documento de Word...",
+                    Duration = 3000
+                });
+
+                await using var memoryStream = new MemoryStream();
+                await selectedFile.OpenReadStream(maxAllowedSize: 512000).CopyToAsync(memoryStream);
+                var fileBytes = memoryStream.ToArray();
+                var base64 = Convert.ToBase64String(fileBytes);
+
+                var text = await JSRuntime.InvokeAsync<string>("readDocxFile", base64);
+                EditorContent = text;
+                StateHasChanged();
+
+                // Notificación de éxito
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Importación exitosa",
+                    Detail = $"Documento '{selectedFile.Name}' importado correctamente",
+                    Duration = 4000
+                });
+            }
+            catch (Exception ex)
+            {
+                // Notificación de error
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Error de importación",
+                    Detail = $"No se pudo importar el archivo: {ex.Message}",
+                    Duration = 6000
+                });
+            }
+        }
+    }
+
+    // Plantilla inicial de factura - Diseño médico profesional
+    private string InitialInvoiceTemplate => $@"
+        <div class='factura-template' style='font-family: Arial, sans-serif; font-size: 12px; line-height: 1.2; border: 2px solid #000; margin: 0; padding: 0;'>
+
+            <!-- Encabezado principal con logo y datos de la empresa -->
+            <table style='width: 100%; border-collapse: collapse; margin: 0;'>
+                <tr>
+                    <td style='width: 15%; padding: 8px; border: 1px solid #000; text-align: center; vertical-align: middle;'>
+                        {GetLogoHtml()}
+                    </td>
+                    <td style='width: 70%; padding: 8px; border: 1px solid #000; text-align: center; vertical-align: middle;'>
+                        <h2 style='margin: 0; font-size: 14px; font-weight: bold; color: #000;'>UNIDAD MÉDICA ESPECIALIZADA S.A.S</h2>
+                        <div style='margin-top: 5px;'>
+                            <strong>Nit:</strong> 900416218-1 &nbsp;&nbsp;&nbsp; <strong>Código de Habilitación:</strong> 7614709489
+                        </div>
+                        <div style='margin-top: 3px;'>
+                            <strong>Dirección:</strong> CARRERA 3 ENTRE CALLE 1 Y 2 &nbsp;&nbsp;&nbsp; <strong>Teléfonos:</strong> 6023989515
+                        </div>
+                    </td>
+                    <td style='width: 15%; padding: 8px; border: 1px solid #000; text-align: center; vertical-align: middle;'>
+                        <div style='width: 80px; height: 80px; border: 1px solid #000; margin: 0 auto; display: flex; align-items: center; justify-content: center; font-size: 10px;'>
+                            QR CODE
+                        </div>
+                    </td>
+                </tr>
+            </table>
+
+            <!-- Información de resolución -->
+            <div style='text-align: center; padding: 5px; border: 1px solid #000; border-top: none; font-size: 10px; background-color: #f0f0f0;'>
+                Resolución DIAN 18764077139781 del 14-08-2024 Prefijo FELS del 1023 al 20000 Vig. 12 Meses<br>
+                <strong>NO SOMOS GRANDES CONTRIBUYENTES</strong>
+            </div>
+
+            <!-- Título de factura electrónica -->
+            <div style='text-align: center; padding: 8px; border: 1px solid #000; border-top: none; background-color: #e0e0e0;'>
+                <h3 style='margin: 0; font-size: 16px; font-weight: bold;'>FACTURA ELECTRONICA DE VENTA FELS2986</h3>
+            </div>
+
+            <!-- Información del paciente y factura -->
+            <table style='width: 100%; border-collapse: collapse; border: 1px solid #000;'>
+                <tbody>
+                    <tr>
+                        <td style='padding: 4px; border: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>No. Historia:</td>
+                        <td style='padding: 4px; border: 1px solid #000;'>30277181</td>
+                        <td style='padding: 4px; border: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>Fecha Nacimiento:</td>
+                        <td style='padding: 4px; border: 1px solid #000;'>30/04/1956</td>
+                        <td style='padding: 4px; border: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>Fecha exp.:</td>
+                        <td style='padding: 4px; border: 1px solid #000;'>20/01/2025</td>
+                        <td style='padding: 4px; border: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>Vence:</td>
+                        <td style='padding: 4px; border: 1px solid #000;'>21/03/2025</td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 4px; border: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>Fecha Inicio:</td>
+                        <td style='padding: 4px; border: 1px solid #000;'>20/01/2025</td>
+                        <td style='padding: 4px; border: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>Fecha Final:</td>
+                        <td style='padding: 4px; border: 1px solid #000;'>20/01/2025</td>
+                        <td style='padding: 4px; border: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>NIT EPS:</td>
+                        <td style='padding: 4px; border: 1px solid #000;' colspan='3'>805001157</td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 4px; border: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>No. ID:</td>
+                        <td style='padding: 4px; border: 1px solid #000;'>30277181</td>
+                        <td style='padding: 4px; border: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>No. Autorizacion:</td>
+                        <td style='padding: 4px; border: 1px solid #000;'>429823089</td>
+                        <td style='padding: 4px; border: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>Entidad:</td>
+                        <td style='padding: 4px; border: 1px solid #000;' colspan='3'>ENTIDAD PROMOTORA DE SALUD SERVICIO OCCIDENTAL DE SALUD SAS</td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 4px; border: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>Nombre:</td>
+                        <td style='padding: 4px; border: 1px solid #000;' colspan='7'>MOLINA DE CASTAÑEDA MARIA RUBIELA</td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 4px; border: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>Direccion:</td>
+                        <td style='padding: 4px; border: 1px solid #000;' colspan='3'>Telef. 3165680962-3207817449-0</td>
+                        <td style='padding: 4px; border: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>Direccion:</td>
+                        <td style='padding: 4px; border: 1px solid #000;' colspan='3'>Carrera 56 11 A 88</td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 4px; border: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>Municipio:</td>
+                        <td style='padding: 4px; border: 1px solid #000;'>LA UNION</td>
+                        <td style='padding: 4px; border: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>Edad:</td>
+                        <td style='padding: 4px; border: 1px solid #000;'>68 Años 8 Meses 22 Dias</td>
+                        <td style='padding: 4px; border: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>Contrato:</td>
+                        <td style='padding: 4px; border: 1px solid #000;'>Poliza</td>
+                        <td style='padding: 4px; border: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>Plan de Beneficios:</td>
+                        <td style='padding: 4px; border: 1px solid #000;'></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- Tabla de servicios -->
+            <table style='width: 100%; border-collapse: collapse; margin: 0;'>
+                <tr style='background-color: #f0f0f0;'>
+                    <th style='border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold;'>CÓDIGO</th>
+                    <th style='border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold;'>DESCRIPCIÓN</th>
+                    <th style='border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold;'>FECHA</th>
+                    <th style='border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold;'>Vr. Unit</th>
+                    <th style='border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold;'>Cant.</th>
+                    <th style='border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold;'>Vr. Total</th>
+                </tr>
+                <tr>
+                    <td style='border: 1px solid #000; padding: 6px; text-align: center;'>881202</td>
+                    <td style='border: 1px solid #000; padding: 6px;'>ECOCARDIOGRAMA TRANSTORÁCICO</td>
+                    <td style='border: 1px solid #000; padding: 6px; text-align: center;'>{DateTime.Now:dd/MM/yyyy}</td>
+                    <td style='border: 1px solid #000; padding: 6px; text-align: right;'>220,000</td>
+                    <td style='border: 1px solid #000; padding: 6px; text-align: center;'>1</td>
+                    <td style='border: 1px solid #000; padding: 6px; text-align: right;'>220,000</td>
+                </tr>
+            </table>
+
+            <!-- Totales -->
+            <table style='width: 100%; border-collapse: collapse; margin: 0;'>
+                <tr>
+                    <td style='width: 50%; border: 1px solid #000; padding: 8px; vertical-align: top;'>
+                        <div style='text-align: center; font-weight: bold; margin-bottom: 10px;'>SON EN TOTAL A PAGAR POR LA ASEGURADORA</div>
+                        <div style='font-size: 11px;'>DOSCIENTOS VEINTE MIL PESOS CON 00 CENTAVOS</div>
+                    </td>
+                    <td style='width: 50%; border: 1px solid #000; border-left: none; padding: 0;'>
+                        <table style='width: 100%; border-collapse: collapse;'>
+                            <tr>
+                                <td style='padding: 6px; border-bottom: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>TOTAL FACTURA:</td>
+                                <td style='padding: 6px; border-bottom: 1px solid #000; text-align: right; font-weight: bold; font-size: 14px;'>220,000</td>
+                            </tr>
+                            <tr>
+                                <td style='padding: 4px; border-bottom: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>Valor a pagar por Entidad o EPS</td>
+                                <td style='padding: 4px; border-bottom: 1px solid #000; text-align: right;'>220,000</td>
+                            </tr>
+                            <tr>
+                                <td style='padding: 4px; border-bottom: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>Cuota de Recuperación</td>
+                                <td style='padding: 4px; border-bottom: 1px solid #000; text-align: right;'>0</td>
+                            </tr>
+                            <tr>
+                                <td style='padding: 4px; border-bottom: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>Cuota Moderadora</td>
+                                <td style='padding: 4px; border-bottom: 1px solid #000; text-align: right;'>0</td>
+                            </tr>
+                            <tr>
+                                <td style='padding: 4px; border-bottom: 1px solid #000; background-color: #f0f0f0; font-weight: bold;'>Copago</td>
+                                <td style='padding: 4px; border-bottom: 1px solid #000; text-align: right;'>0</td>
+                            </tr>
+                            <tr>
+                                <td style='padding: 4px; background-color: #f0f0f0; font-weight: bold;'>Pagos Compartidos</td>
+                                <td style='padding: 4px; text-align: right;'>0</td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+
+            <!-- Información adicional -->
+            <div style='border: 1px solid #000; border-top: none; padding: 8px; font-size: 10px;'>
+                <div style='margin-bottom: 5px;'><em>Diseñada y Generada por MediSoft, Software de Facturación Hospitalaria - Software Propio</em> &nbsp;&nbsp;&nbsp; {DateTime.Now:dd/MM/yyyy HH:mm:ss} &nbsp;&nbsp;&nbsp; 285502</div>
+                <div style='margin-bottom: 5px;'><strong>Modalidad de Pago: Pago por Evento</strong></div>
+                <div style='margin-bottom: 5px;'><strong>Forma de pago: Crédito</strong></div>
+                <div style='font-size: 9px; word-break: break-all;'>CUFE:9cb456d1487b1daae3c2ec3845b229a85b93ed667062b627f6657972c2deb47f84393142784580bc1c5001cabb2a08f</div>
+                <div style='margin-top: 5px;'><strong>Fecha de Envío a la DIAN {DateTime.Now:dd/MM/yyyy HH:mm:ss}</strong></div>
+            </div>
+        </div>";
+
+    private async Task ExportToPdf()
+    {
+        try
+        {
+            // Notificación de inicio
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Info,
+                Summary = "Generando PDF",
+                Detail = $"Creando PDF en formato {GetFormatName(CurrentPaperFormat)}...",
+                Duration = 3000
+            });
+
+            // Obtener el contenido HTML del editor
+            string htmlContent = await GetEditorContent();
+
+            // Llamar a la función JS para crear el PDF desde el HTML
+            await JSRuntime.InvokeVoidAsync("exportHtmlToPdf", htmlContent, CurrentPaperFormat);
+
+            string formatName = GetFormatName(CurrentPaperFormat);
+
+            // Notificación de éxito
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = "PDF generado",
+                Detail = $"Factura exportada exitosamente en formato {formatName}",
+                Duration = 4000
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error en ExportToPdf: {ex.Message}");
+
+            // Notificación de error
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error de exportación",
+                Detail = $"No se pudo generar el PDF: {ex.Message}",
+                Duration = 6000
+            });
+        }
+    }
+
+    private async Task CreateAdvancedPdf(string htmlContent)
+    {
+        try
+        {
+            var invoiceData = await ExtractInvoiceData();
+
+            using (PdfDocument document = new PdfDocument())
+            {
+                // Configurar el tamaño de página según el formato seleccionado
+                SetPdfPageSize(document, CurrentPaperFormat);
+
+                // Configurar márgenes según el formato
+                var margins = GetMarginsForFormat(CurrentPaperFormat);
+                document.PageSettings.Margins.All = margins;
+
+                // Crear fuentes
+                PdfFont titleFont = new PdfStandardFont(PdfFontFamily.Helvetica, GetTitleFontSize(CurrentPaperFormat), PdfFontStyle.Bold);
+                PdfFont headerFont = new PdfStandardFont(PdfFontFamily.Helvetica, GetHeaderFontSize(CurrentPaperFormat), PdfFontStyle.Bold);
+                PdfFont contentFont = new PdfStandardFont(PdfFontFamily.Helvetica, GetContentFontSize(CurrentPaperFormat));
+
+                // Agregar página
+                PdfPage page = document.Pages.Add();
+                PdfGraphics graphics = page.Graphics;
+
+                // Variables para posicionamiento
+                float yPosition = 0;
+                float pageWidth = page.GetClientSize().Width;
+
+                // Agregar logo si está disponible
+                if (!string.IsNullOrEmpty(LogoUrl))
+                {
+                    try
+                    {
+                        // Descargar imagen del logo desde URL
+                        byte[] imageBytes = await HttpClient.GetByteArrayAsync(LogoUrl);
+                        using (MemoryStream imageStream = new MemoryStream(imageBytes))
+                        {
+                            PdfBitmap logoBitmap = new PdfBitmap(imageStream);
+                            var logoSize = GetPdfLogoSize(CurrentPaperFormat);
+
+                            // Centrar el logo
+                            float logoX = (pageWidth - logoSize.Width) / 2;
+                            graphics.DrawImage(logoBitmap, new RectangleF(logoX, yPosition, logoSize.Width, logoSize.Height));
+                            yPosition += logoSize.Height + 10;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error al cargar logo: {ex.Message}");
+                        // Continuar sin logo si hay error
+                    }
+                }
+
+                // Título de la factura
+                graphics.DrawString("FACTURA", titleFont, PdfBrushes.Black,
+                    new PointF(pageWidth / 2 - 30, yPosition));
+                yPosition += GetTitleFontSize(CurrentPaperFormat) + 10;
+
+                // Número de factura centrado
+                var invoiceNumText = $"Nº: {invoiceData.InvoiceNumber}";
+                graphics.DrawString(invoiceNumText, contentFont, PdfBrushes.Gray,
+                    new PointF(pageWidth / 2 - 40, yPosition));
+                yPosition += GetContentFontSize(CurrentPaperFormat) + 15;
+
+                // Información de la empresa
+                graphics.DrawString(invoiceData.CompanyName, headerFont, PdfBrushes.Black, new PointF(0, yPosition));
+                yPosition += GetHeaderFontSize(CurrentPaperFormat) + 3;
+                graphics.DrawString(invoiceData.CompanyAddress, contentFont, PdfBrushes.Black, new PointF(0, yPosition));
+                yPosition += GetContentFontSize(CurrentPaperFormat) + 3;
+                graphics.DrawString($"Tel: {invoiceData.CompanyPhone}", contentFont, PdfBrushes.Black, new PointF(0, yPosition));
+                yPosition += GetContentFontSize(CurrentPaperFormat) + 3;
+                graphics.DrawString($"Email: {invoiceData.CompanyEmail}", contentFont, PdfBrushes.Black, new PointF(0, yPosition));
+                yPosition += GetContentFontSize(CurrentPaperFormat) + 3;
+                graphics.DrawString($"CIF: {invoiceData.CompanyCIF}", contentFont, PdfBrushes.Black, new PointF(0, yPosition));
+
+                // Fecha en la esquina superior derecha
+                var dateText = $"Fecha: {invoiceData.Date:dd/MM/yyyy}";
+                graphics.DrawString(dateText, contentFont, PdfBrushes.Black,
+                    new PointF(pageWidth - 100, yPosition - (GetContentFontSize(CurrentPaperFormat) * 4)));
+
+                yPosition += GetContentFontSize(CurrentPaperFormat) + 15;
+
+                // Cliente
+                graphics.DrawString("DATOS DEL CLIENTE", headerFont, PdfBrushes.Black, new PointF(0, yPosition));
+                yPosition += GetHeaderFontSize(CurrentPaperFormat) + 5;
+                graphics.DrawString($"Nombre: {invoiceData.ClientName}", contentFont, PdfBrushes.Black, new PointF(0, yPosition));
+                yPosition += GetContentFontSize(CurrentPaperFormat) + 3;
+                graphics.DrawString($"NIF/CIF: {invoiceData.ClientNIF}", contentFont, PdfBrushes.Black, new PointF(0, yPosition));
+                yPosition += GetContentFontSize(CurrentPaperFormat) + 3;
+                graphics.DrawString($"Dirección: {invoiceData.ClientAddress}", contentFont, PdfBrushes.Black, new PointF(0, yPosition));
+                yPosition += GetContentFontSize(CurrentPaperFormat) + 20;
+
+                // Crear tabla de productos
+                PdfGrid grid = new PdfGrid();
+                grid.Columns.Add(4);
+
+                // Configurar anchos de columna según el formato
+                if (CurrentPaperFormat.Contains("ticket"))
+                {
+                    grid.Columns[0].Width = pageWidth * 0.15f; // CANT
+                    grid.Columns[1].Width = pageWidth * 0.45f; // DESC
+                    grid.Columns[2].Width = pageWidth * 0.20f; // PRECIO
+                    grid.Columns[3].Width = pageWidth * 0.20f; // TOTAL
+                }
+                else
+                {
+                    grid.Columns[0].Width = pageWidth * 0.10f;
+                    grid.Columns[1].Width = pageWidth * 0.50f;
+                    grid.Columns[2].Width = pageWidth * 0.20f;
+                    grid.Columns[3].Width = pageWidth * 0.20f;
+                }
+
+                // Encabezados de la tabla
+                PdfGridRow headerRow = grid.Headers.Add(1)[0];
+                headerRow.Cells[0].Value = "CANT.";
+                headerRow.Cells[1].Value = "DESCRIPCIÓN";
+                headerRow.Cells[2].Value = "P. UNIT.";
+                headerRow.Cells[3].Value = "TOTAL";
+
+                // Estilo para encabezados
+                headerRow.Style.Font = headerFont;
+                headerRow.Style.BackgroundBrush = new PdfSolidBrush(new PdfColor(44, 90, 160));
+                headerRow.Style.TextBrush = PdfBrushes.White;
+
+                // Agregar datos de productos
+                foreach (var item in invoiceData.Items)
+                {
+                    PdfGridRow dataRow = grid.Rows.Add();
+                    dataRow.Cells[0].Value = item.Quantity.ToString();
+                    dataRow.Cells[1].Value = item.Description;
+                    dataRow.Cells[2].Value = $"{item.UnitPrice:F2} €";
+                    dataRow.Cells[3].Value = $"{item.Total:F2} €";
+                }
+
+                // Estilo para datos
+                grid.Style.Font = contentFont;
+                grid.Style.CellPadding = new PdfPaddings(3, 3, 3, 3);
+
+                // Dibujar la tabla
+                PdfGridLayoutResult result = grid.Draw(page, new PointF(0, yPosition));
+                yPosition = result.Bounds.Bottom + 15;
+
+                // Totales
+                var totalWidth = pageWidth * 0.4f;
+                var totalX = pageWidth - totalWidth;
+
+                graphics.DrawString($"Subtotal: {invoiceData.Subtotal:F2} €", contentFont, PdfBrushes.Black,
+                    new PointF(totalX, yPosition));
+                yPosition += GetContentFontSize(CurrentPaperFormat) + 5;
+
+                graphics.DrawString($"IVA ({invoiceData.TaxRate:P0}): {invoiceData.TaxAmount:F2} €", contentFont, PdfBrushes.Black,
+                    new PointF(totalX, yPosition));
+                yPosition += GetContentFontSize(CurrentPaperFormat) + 10;
+
+                // Total final con fondo
+                var totalRect = new RectangleF(totalX - 10, yPosition - 5, totalWidth + 10, GetHeaderFontSize(CurrentPaperFormat) + 10);
+                graphics.DrawRectangle(new PdfSolidBrush(new PdfColor(44, 90, 160)), totalRect);
+                graphics.DrawString($"TOTAL: {invoiceData.Total:F2} €", headerFont, PdfBrushes.White,
+                    new PointF(totalX, yPosition));
+                yPosition += GetHeaderFontSize(CurrentPaperFormat) + 20;
+
+                // Información de pago (solo si hay espacio)
+                if (yPosition < page.GetClientSize().Height - 60)
+                {
+                    graphics.DrawString("INFORMACIÓN DE PAGO", headerFont, PdfBrushes.Black, new PointF(0, yPosition));
+                    yPosition += GetHeaderFontSize(CurrentPaperFormat) + 5;
+                    graphics.DrawString($"Forma de pago: {invoiceData.PaymentMethod}", contentFont, PdfBrushes.Black, new PointF(0, yPosition));
+                    yPosition += GetContentFontSize(CurrentPaperFormat) + 3;
+                    graphics.DrawString($"IBAN: {invoiceData.IBAN}", contentFont, PdfBrushes.Black, new PointF(0, yPosition));
+                    yPosition += GetContentFontSize(CurrentPaperFormat) + 3;
+                    graphics.DrawString($"Concepto: Factura {invoiceData.InvoiceNumber}", contentFont, PdfBrushes.Black, new PointF(0, yPosition));
+                }
+
+                // Guardar el documento
+                using (MemoryStream stream = new MemoryStream())
+                {
+                    document.Save(stream);
+                    byte[] fileContent = stream.ToArray();
+                    string fileName = $"Factura_{invoiceData.InvoiceNumber}_{CurrentPaperFormat}.pdf";
+                    await JSRuntime.InvokeVoidAsync("BlazorDownloadFile", fileName, "application/pdf", Convert.ToBase64String(fileContent));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Error creando PDF avanzado: {ex.Message}");
+        }
+    }
+
+    private async Task PrintDocument()
+    {
+        try
+        {
+            // Notificación de inicio
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Info,
+                Summary = "Preparando impresión",
+                Detail = $"Configurando documento para formato {GetFormatName(CurrentPaperFormat)}...",
+                Duration = 2000
+            });
+
+            // Obtener el contenido HTML del editor
+            string htmlContent = await GetEditorContent();
+
+            // Aplicar estilos específicos para impresión
+            htmlContent = ApplyPrintStyles(htmlContent, CurrentPaperFormat);
+
+            // Llamar a la función JavaScript para imprimir
+            await JSRuntime.InvokeVoidAsync("printDocument", htmlContent, CurrentPaperFormat);
+
+            // Notificación de éxito
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = "Enviado a impresora",
+                Detail = $"Documento enviado a impresión en formato {GetFormatName(CurrentPaperFormat)}",
+                Duration = 4000
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error en PrintDocument: {ex.Message}");
+
+            // Notificación de error
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error de impresión",
+                Detail = $"No se pudo imprimir el documento: {ex.Message}",
+                Duration = 6000
+            });
+        }
+    }
+
+    private async void SetPaperFormat(string format)
+    {
+        CurrentPaperFormat = format;
+
+        // Notificación de cambio de formato
+        NotificationService.Notify(new NotificationMessage
+        {
+            Severity = NotificationSeverity.Info,
+            Summary = "Formato cambiado",
+            Detail = $"Formato de papel actualizado a {GetFormatName(format)}",
+            Duration = 3000
+        });
+
+        // Aplicar estilos CSS según el formato seleccionado
+        await ApplyFormatStyles(format);
+
+        // Actualizar la interfaz de usuario
+        StateHasChanged();
+    }
+
+    private void OnPaperFormatChange(Microsoft.AspNetCore.Components.ChangeEventArgs e)
+    {
+        var format = e.Value?.ToString();
+        if (!string.IsNullOrEmpty(format))
+        {
+            SetPaperFormat(format);
+        }
+    }
+
+    private async Task ApplyFormatStyles(string format)
+    {
+        try
+        {
+            // Remover todas las clases de formato anteriores
+            await JSRuntime.InvokeVoidAsync("removeFormatClasses");
+
+            // Aplicar la clase CSS correspondiente al formato seleccionado
+            await JSRuntime.InvokeVoidAsync("applyFormatClass", $"format-{format}");
+
+            // Ajustar el contenido según el formato
+            string formatName = GetFormatName(format);
+            await JSRuntime.InvokeVoidAsync("adjustContentForFormat", format, formatName);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al aplicar estilos: {ex.Message}");
+        }
+    }
+
+    private string ApplyPdfStyles(string htmlContent, string format)
+    {
+        // Aplicar estilos específicos para PDF según el formato
+        string styleTag = $"<style>.factura-template {{ {GetFormatStylesCSS(format)} }}</style>";
+        return styleTag + htmlContent;
+    }
+
+    private string ApplyPrintStyles(string htmlContent, string format)
+    {
+        // Aplicar estilos específicos para impresión según el formato
+        string styleTag = $"<style>@media print {{ body {{ margin: 0; padding: 0; }} .factura-template {{ {GetFormatStylesCSS(format)} }} }}</style>";
+        return styleTag + htmlContent;
+    }
+
+    private string GetFormatStylesCSS(string format)
+    {
+        return format switch
+        {
+            "a4-v" => "width: 210mm; min-height: 297mm; padding: 10mm;",
+            "a4-h" => "width: 297mm; min-height: 210mm; padding: 10mm;",
+            "ticket-80" => "width: 80mm; font-size: 0.8em; padding: 5mm;",
+            "ticket-58" => "width: 58mm; font-size: 0.7em; padding: 3mm;",
+            "letter-v" => "width: 216mm; min-height: 279mm; padding: 10mm;",
+            "letter-h" => "width: 279mm; min-height: 216mm; padding: 10mm;",
+            "legal-v" => "width: 216mm; min-height: 330mm; padding: 10mm;",
+            "legal-h" => "width: 330mm; min-height: 216mm; padding: 10mm;",
+            "folio-v" => "width: 216mm; min-height: 305mm; padding: 10mm;",
+            "folio-h" => "width: 305mm; min-height: 216mm; padding: 10mm;",
+            "pos-80" => "width: 80mm; font-size: 0.8em; padding: 5mm;",
+            _ => "width: 210mm; min-height: 297mm; padding: 10mm;"
+        };
+    }
+
+    private void SetPdfPageSize(PdfDocument document, string format)
+    {
+        switch (format)
+        {
+            case "a4-v":
+                document.PageSettings.Size = Syncfusion.Pdf.PdfPageSize.A4;
+                document.PageSettings.Orientation = Syncfusion.Pdf.PdfPageOrientation.Portrait;
+                break;
+            case "a4-h":
+                document.PageSettings.Size = Syncfusion.Pdf.PdfPageSize.A4;
+                document.PageSettings.Orientation = Syncfusion.Pdf.PdfPageOrientation.Landscape;
+                break;
+            case "letter-v":
+                document.PageSettings.Size = Syncfusion.Pdf.PdfPageSize.Letter;
+                document.PageSettings.Orientation = Syncfusion.Pdf.PdfPageOrientation.Portrait;
+                break;
+            case "letter-h":
+                document.PageSettings.Size = Syncfusion.Pdf.PdfPageSize.Letter;
+                document.PageSettings.Orientation = Syncfusion.Pdf.PdfPageOrientation.Landscape;
+                break;
+            case "legal-v":
+                document.PageSettings.Size = new Syncfusion.Drawing.SizeF(612, 936); // 8.5" x 13" en puntos
+                document.PageSettings.Orientation = Syncfusion.Pdf.PdfPageOrientation.Portrait;
+                break;
+            case "legal-h":
+                document.PageSettings.Size = new Syncfusion.Drawing.SizeF(936, 612); // 13" x 8.5" en puntos
+                document.PageSettings.Orientation = Syncfusion.Pdf.PdfPageOrientation.Landscape;
+                break;
+            case "folio-v":
+                document.PageSettings.Size = new Syncfusion.Drawing.SizeF(612, 864); // 8.5" x 12" en puntos
+                document.PageSettings.Orientation = Syncfusion.Pdf.PdfPageOrientation.Portrait;
+                break;
+            case "folio-h":
+                document.PageSettings.Size = new Syncfusion.Drawing.SizeF(864, 612); // 12" x 8.5" en puntos
+                document.PageSettings.Orientation = Syncfusion.Pdf.PdfPageOrientation.Landscape;
+                break;
+            case "ticket-80":
+            case "pos-80":
+                document.PageSettings.Size = new Syncfusion.Drawing.SizeF(226, 842); // 80mm x 297mm en puntos
+                document.PageSettings.Orientation = Syncfusion.Pdf.PdfPageOrientation.Portrait;
+                break;
+            case "ticket-58":
+                document.PageSettings.Size = new Syncfusion.Drawing.SizeF(164, 842); // 58mm x 297mm en puntos
+                document.PageSettings.Orientation = Syncfusion.Pdf.PdfPageOrientation.Portrait;
+                break;
+            default:
+                document.PageSettings.Size = Syncfusion.Pdf.PdfPageSize.A4;
+                document.PageSettings.Orientation = Syncfusion.Pdf.PdfPageOrientation.Portrait;
+                break;
+        }
+    }
+
+    private float GetMarginsForFormat(string format)
+    {
+        return format switch
+        {
+            "ticket-80" or "pos-80" => 10, // Márgenes pequeños para tickets
+            "ticket-58" => 8,              // Márgenes muy pequeños para tickets 58mm
+            "legal-v" or "legal-h" => 25,  // Márgenes más amplios para legal
+            "folio-v" or "folio-h" => 22,  // Márgenes amplios para folio
+            _ => 20                         // Márgenes normales para otros formatos
+        };
+    }
+
+    private float GetTitleFontSize(string format)
+    {
+        return format switch
+        {
+            "ticket-80" or "pos-80" => 12,
+            "ticket-58" => 10,
+            "legal-v" or "legal-h" => 18,
+            "folio-v" or "folio-h" => 17,
+            _ => 16
+        };
+    }
+
+    private float GetHeaderFontSize(string format)
+    {
+        return format switch
+        {
+            "ticket-80" or "pos-80" => 10,
+            "ticket-58" => 8,
+            "legal-v" or "legal-h" => 14,
+            "folio-v" or "folio-h" => 13,
+            _ => 12
+        };
+    }
+
+    private float GetContentFontSize(string format)
+    {
+        return format switch
+        {
+            "ticket-80" or "pos-80" => 8,
+            "ticket-58" => 7,
+            "legal-v" or "legal-h" => 11,
+            "folio-v" or "folio-h" => 10.5f,
+            _ => 10
+        };
+    }
+
+    private (float Width, float Height) GetPdfLogoSize(string format)
+    {
+        return format switch
+        {
+            "ticket-58" => (40f, 20f),
+            "ticket-80" or "pos-80" => (50f, 25f),
+            "legal-v" or "legal-h" => (80f, 40f),
+            "folio-v" or "folio-h" => (70f, 35f),
+            _ => (60f, 30f)
+        };
+    }
+
+    private string GetFormatName(string formatCode)
+    {
+        return formatCode switch
+        {
+            "a4-v" => "A4 Vertical",
+            "a4-h" => "A4 Horizontal",
+            "ticket-80" => "Ticket 80mm",
+            "ticket-58" => "Ticket 58mm",
+            "letter-v" => "Carta Vertical",
+            "letter-h" => "Carta Horizontal",
+            "legal-v" => "Legal Vertical (13\")",
+            "legal-h" => "Legal Horizontal (13\")",
+            "folio-v" => "Folio Vertical (12\")",
+            "folio-h" => "Folio Horizontal (12\")",
+            "pos-80" => "POS 80mm",
+            _ => "Desconocido"
+        };
+    }
+
+    private string GetFormatDescription(string formatCode)
+    {
+        return formatCode switch
+        {
+            "a4-v" => "Formato estándar A4 (210 × 297 mm) en orientación vertical.",
+            "a4-h" => "Formato estándar A4 (297 × 210 mm) en orientación horizontal.",
+            "ticket-80" => "Formato para impresoras térmicas de 80mm, ideal para tickets y recibos.",
+            "ticket-58" => "Formato para impresoras térmicas de 58mm, más compacto para recibos pequeños.",
+            "letter-v" => "Formato Carta (216 × 279 mm) en orientación vertical.",
+            "letter-h" => "Formato Carta (279 × 216 mm) en orientación horizontal.",
+            "legal-v" => "Formato Legal (216 × 330 mm / 8.5\" × 13\") en orientación vertical, ideal para documentos legales.",
+            "legal-h" => "Formato Legal (330 × 216 mm / 13\" × 8.5\") en orientación horizontal.",
+            "folio-v" => "Formato Folio (216 × 305 mm / 8.5\" × 12\") en orientación vertical, común en oficinas.",
+            "folio-h" => "Formato Folio (305 × 216 mm / 12\" × 8.5\") en orientación horizontal.",
+            "pos-80" => "Formato POS de 80mm, optimizado para sistemas de punto de venta y recibos comerciales.",
+            _ => "Formato personalizado."
+        };
+    }
+
+
+
+    // Eventos del Rich Text Editor
+    private void OnValueChange(Syncfusion.Blazor.RichTextEditor.ChangeEventArgs args)
+    {
+        EditorContent = args.Value?.ToString() ?? "";
+    }
+
+    private async Task OnEditorCreated()
+    {
+        // Cargar la plantilla inicial si el editor está vacío
+        if (string.IsNullOrEmpty(EditorContent))
+        {
+            EditorContent = InitialInvoiceTemplate;
+            StateHasChanged();
+
+            // Notificación de bienvenida
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Info,
+                Summary = "Editor listo",
+                Detail = "Plantilla de factura cargada. Puedes editarla o importar un documento de Word",
+                Duration = 5000
+            });
+        }
+    }
+
+    // Función auxiliar para obtener el contenido del editor
+    private async Task<string> GetEditorContent()
+    {
+        try
+        {
+            if (RteObj != null)
+            {
+                return EditorContent;
+            }
+            return EditorContent;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al obtener contenido del editor: {ex.Message}");
+            return EditorContent;
+        }
+    }
+
+    // Función para obtener datos del editor para exportación
+    private async Task<InvoiceData> ExtractInvoiceData()
+    {
+        var content = await GetEditorContent();
+
+        // Extraer datos básicos de la factura desde el HTML
+        // En una implementación real, esto podría ser más sofisticado
+        return new InvoiceData
+        {
+            InvoiceNumber = $"{DateTime.Now:yyyyMMdd}-001",
+            Date = DateTime.Now,
+            CompanyName = "EMPRESA EJEMPLO S.L.",
+            CompanyAddress = "Calle Principal #123",
+            CompanyPhone = "123-456-789",
+            CompanyEmail = "info@empresa.com",
+            CompanyCIF = "A12345678",
+            ClientName = "Cliente Ejemplo",
+            ClientNIF = "12345678A",
+            ClientAddress = "Dirección del Cliente",
+            ClientPhone = "987-654-321",
+            Items = new List<InvoiceItem>
+            {
+                new InvoiceItem { Quantity = 1, Description = "Producto o servicio de ejemplo", UnitPrice = 10.00m, Total = 10.00m },
+                new InvoiceItem { Quantity = 2, Description = "Otro producto o servicio", UnitPrice = 15.00m, Total = 30.00m }
+            },
+            Subtotal = 40.00m,
+            TaxRate = 0.21m,
+            TaxAmount = 8.40m,
+            Total = 48.40m,
+            PaymentMethod = "Transferencia bancaria",
+            IBAN = "ES12 1234 5678 9012 3456 7890"
+        };
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Cargar la plantilla inicial
+        if (string.IsNullOrEmpty(EditorContent))
+        {
+            EditorContent = InitialInvoiceTemplate;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Registrar las funciones JavaScript
+            await RegisterJavaScriptFunctions();
+
+            // Aplicar el formato inicial después de un breve retraso para asegurar que el editor esté listo
+            await Task.Delay(500);
+            await ApplyFormatStyles(CurrentPaperFormat);
+        }
+    }
+
+    private async Task RegisterJavaScriptFunctions()
+    {
+        try
+        {
+            // Definir las funciones JavaScript necesarias
+            string jsCode = @"
+                // Función para exportar a PDF (simulación)
+                window.exportToPdf = function (htmlContent, formatName, formatType) {
+                    try {
+                        // Crear un elemento temporal para renderizar el contenido
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = htmlContent;
+                        tempDiv.style.position = 'absolute';
+                        tempDiv.style.left = '-9999px';
+                        document.body.appendChild(tempDiv);
+
+                        // En una implementación real, aquí se usaría una biblioteca como jsPDF
+                        console.log('Exportando a PDF en formato: ' + formatName);
+
+                        // Simular descarga
+                        setTimeout(function() {
+                            document.body.removeChild(tempDiv);
+                            alert('PDF exportado en formato: ' + formatName);
+                        }, 500);
+
+                        return true;
+                    } catch (error) {
+                        console.error('Error al exportar a PDF:', error);
+                        alert('Error al exportar a PDF: ' + error.message);
+                        return false;
+                    }
+                };
+
+                // Función para imprimir el documento
+                window.printDocument = function (htmlContent, formatType) {
+                    try {
+                        // Crear un iframe para imprimir
+                        const printFrame = document.createElement('iframe');
+                        printFrame.style.display = 'none';
+                        document.body.appendChild(printFrame);
+
+                        // Escribir el contenido en el iframe
+                        printFrame.contentDocument.write('<html><head><title>Factura para Imprimir</title>');
+                        printFrame.contentDocument.write('<style>');
+                        printFrame.contentDocument.write('@page { size: ' + getPageSize(formatType) + '; }');
+                        printFrame.contentDocument.write('body { margin: 0; padding: 0; }');
+                        printFrame.contentDocument.write('</style></head><body>');
+                        printFrame.contentDocument.write(htmlContent);
+                        printFrame.contentDocument.write('</body></html>');
+                        printFrame.contentDocument.close();
+
+                        // Esperar a que se carguen los estilos y luego imprimir
+                        setTimeout(function() {
+                            printFrame.contentWindow.print();
+
+                            // Eliminar el iframe después de imprimir
+                            setTimeout(function() {
+                                document.body.removeChild(printFrame);
+                            }, 1000);
+                        }, 500);
+
+                        return true;
+                    } catch (error) {
+                        console.error('Error al imprimir:', error);
+                        alert('Error al imprimir: ' + error.message);
+                        return false;
+                    }
+                };
+
+                // Función para remover clases de formato
+                window.removeFormatClasses = function () {
+                    try {
+                        const editorContainer = document.querySelector('.e-rte-content');
+                        if (editorContainer) {
+                            editorContainer.classList.remove('format-a4-v', 'format-a4-h', 'format-ticket-80', 'format-ticket-58', 'format-letter-v', 'format-letter-h', 'format-legal-v', 'format-legal-h', 'format-folio-v', 'format-folio-h', 'format-pos-80');
+                            return true;
+                        }
+                        return false;
+                    } catch (error) {
+                        console.error('Error al remover clases:', error);
+                        return false;
+                    }
+                };
+
+                // Función para aplicar clase de formato
+                window.applyFormatClass = function (formatClass) {
+                    try {
+                        const editorContainer = document.querySelector('.e-rte-content');
+                        if (editorContainer) {
+                            editorContainer.classList.add(formatClass);
+                            return true;
+                        }
+                        return false;
+                    } catch (error) {
+                        console.error('Error al aplicar clase:', error);
+                        return false;
+                    }
+                };
+
+                // Función para ajustar contenido según formato
+                window.adjustContentForFormat = function (format, formatName) {
+                    try {
+                        const editorContainer = document.querySelector('.e-rte-content');
+                        if (editorContainer) {
+                            console.log('Ajustando contenido para formato:', formatName);
+
+                            if (format.includes('ticket') || format.includes('pos-80')) {
+                                // Para tickets y POS, simplificar el contenido
+                                const elements = editorContainer.querySelectorAll('*');
+                                const fontSize = format === 'ticket-58' ? '0.7em' : '0.8em';
+                                const margin = format === 'ticket-58' ? '1px 0' : '2px 0';
+                                const padding = format === 'ticket-58' ? '1px' : '2px';
+
+                                elements.forEach(el => {
+                                    el.style.fontSize = el.style.fontSize || fontSize;
+                                    el.style.margin = el.style.margin || margin;
+                                    el.style.padding = el.style.padding || padding;
+                                });
+
+                                // Ajustes específicos para tablas en tickets y POS
+                                const tables = editorContainer.querySelectorAll('table');
+                                tables.forEach(table => {
+                                    table.style.width = '100%';
+                                    table.style.fontSize = format === 'ticket-58' ? '0.6em' : '0.7em';
+                                    table.style.borderCollapse = 'collapse';
+                                });
+                            } else {
+                                // Para formatos más grandes, restaurar el contenido
+                                const elements = editorContainer.querySelectorAll('*');
+                                elements.forEach(el => {
+                                    if (el.style.fontSize === '0.8em' || el.style.fontSize === '0.7em') el.style.fontSize = '';
+                                    if (el.style.margin === '2px 0' || el.style.margin === '1px 0') el.style.margin = '';
+                                    if (el.style.padding === '2px' || el.style.padding === '1px') el.style.padding = '';
+                                });
+                            }
+                            return true;
+                        }
+                        return false;
+                    } catch (error) {
+                        console.error('Error al ajustar contenido:', error);
+                        return false;
+                    }
+                };
+
+                // Función auxiliar para obtener el tamaño de página
+                function getPageSize(formatType) {
+                    switch (formatType) {
+                        case 'a4-v': return 'A4 portrait';
+                        case 'a4-h': return 'A4 landscape';
+                        case 'letter-v': return 'Letter portrait';
+                        case 'letter-h': return 'Letter landscape';
+                        case 'ticket-80': return '80mm 297mm';
+                        case 'ticket-58': return '58mm 297mm';
+                        default: return 'A4 portrait';
+                    }
+                }
+
+                // Función para descargar archivos (reutilizada de Modelofactura.razor)
+                window.BlazorDownloadFile = function(fileName, contentType, content) {
+                    const link = document.createElement('a');
+                    link.href = `data:${contentType};base64,${content}`;
+                    link.download = fileName;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                };
+
+                window.triggerClick = function(elementId) {
+                    document.getElementById(elementId).click();
+                };
+            ";
+
+            // Registrar el script
+            await JSRuntime.InvokeVoidAsync("eval", jsCode);
+            Console.WriteLine("Funciones JavaScript registradas correctamente");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al registrar funciones JavaScript: {ex.Message}");
+        }
+    }
+
+    // Clases de datos para la factura
+    public class InvoiceData
+    {
+        public string InvoiceNumber { get; set; } = "";
+        public DateTime Date { get; set; }
+        public string CompanyName { get; set; } = "";
+        public string CompanyAddress { get; set; } = "";
+        public string CompanyPhone { get; set; } = "";
+        public string CompanyEmail { get; set; } = "";
+        public string CompanyCIF { get; set; } = "";
+        public string ClientName { get; set; } = "";
+        public string ClientNIF { get; set; } = "";
+        public string ClientAddress { get; set; } = "";
+        public string ClientPhone { get; set; } = "";
+        public List<InvoiceItem> Items { get; set; } = new();
+        public decimal Subtotal { get; set; }
+        public decimal TaxRate { get; set; }
+        public decimal TaxAmount { get; set; }
+        public decimal Total { get; set; }
+        public string PaymentMethod { get; set; } = "";
+        public string IBAN { get; set; } = "";
+    }
+
+    public class InvoiceItem
+    {
+        public int Quantity { get; set; }
+        public string Description { get; set; } = "";
+        public decimal UnitPrice { get; set; }
+        public decimal Total { get; set; }
+    }
+}
+
+<script>
+    function BlazorDownloadFile(fileName, contentType, content) {
+        const link = document.createElement('a');
+        link.href = `data:${contentType};base64,${content}`;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.8/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+    window.exportHtmlToPdf = function(htmlContent, format) {
+        const { jsPDF } = window.jspdf;
+
+        // Crear un elemento temporal para renderizar el HTML
+        const tempContainer = document.createElement('div');
+        tempContainer.style.position = 'absolute';
+        tempContainer.style.left = '-9999px';
+        tempContainer.style.top = '0';
+        tempContainer.style.background = 'white';
+        tempContainer.style.fontFamily = 'Arial, sans-serif';
+        document.body.appendChild(tempContainer);
+
+        const contentWrapper = document.createElement('div');
+        contentWrapper.innerHTML = htmlContent;
+        tempContainer.appendChild(contentWrapper);
+
+        // Obtener dimensiones del papel y factores de escala
+        const dimensions = getPdfDimensions(format);
+        const scaleFactor = getScaleFactor(format);
+
+        // Configurar el contenedor según el formato
+        if (format.includes('ticket') || format.includes('pos-80')) {
+            // Para formatos pequeños, configurar ancho específico
+            tempContainer.style.width = dimensions.width + 'mm';
+            tempContainer.style.maxWidth = dimensions.width + 'mm';
+            tempContainer.style.padding = '2mm';
+            tempContainer.style.boxSizing = 'border-box';
+
+            // Aplicar estilos específicos para tickets
+            applyTicketStyles(contentWrapper, format);
+        } else {
+            // Para formatos grandes
+            tempContainer.style.width = dimensions.width + 'mm';
+            tempContainer.style.minHeight = dimensions.height + 'mm';
+            tempContainer.style.padding = dimensions.padding + 'mm';
+            tempContainer.style.boxSizing = 'border-box';
+
+            // Aplicar estilos normales
+            applyFormatSpecificStyles(contentWrapper, format, scaleFactor);
+        }
+
+        // Configurar html2canvas con mejor calidad
+        const canvasOptions = {
+            scale: format.includes('ticket') || format.includes('pos-80') ? 4 : 2,
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#ffffff',
+            width: tempContainer.scrollWidth,
+            height: tempContainer.scrollHeight,
+            scrollX: 0,
+            scrollY: 0
+        };
+
+        html2canvas(tempContainer, canvasOptions).then(canvas => {
+            const imgData = canvas.toDataURL('image/png', 1.0);
+            const pdf = new jsPDF({
+                orientation: dimensions.orientation,
+                unit: 'mm',
+                format: dimensions.formatArray
+            });
+
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+
+            if (format.includes('ticket') || format.includes('pos-80')) {
+                // Para tickets, ajustar la imagen al ancho completo
+                const imgWidth = canvas.width;
+                const imgHeight = canvas.height;
+                const ratio = pdfWidth / (imgWidth * 0.264583);
+
+                const finalWidth = pdfWidth - 4; // Dejar 2mm de margen a cada lado
+                const finalHeight = (imgHeight * 0.264583 * ratio);
+
+                // Centrar horizontalmente, empezar desde arriba
+                const x = 2;
+                const y = 2;
+
+                pdf.addImage(imgData, 'PNG', x, y, finalWidth, finalHeight);
+            } else {
+                // Para formatos grandes, centrar la imagen
+                const imgWidth = canvas.width;
+                const imgHeight = canvas.height;
+                const ratio = Math.min(pdfWidth / (imgWidth * 0.264583), pdfHeight / (imgHeight * 0.264583));
+
+                const finalWidth = imgWidth * 0.264583 * ratio;
+                const finalHeight = imgHeight * 0.264583 * ratio;
+
+                const x = (pdfWidth - finalWidth) / 2;
+                const y = (pdfHeight - finalHeight) / 2;
+
+                pdf.addImage(imgData, 'PNG', x, y, finalWidth, finalHeight);
+            }
+
+            const fileName = `Factura_${format}_${new Date().toISOString().slice(0,10)}.pdf`;
+            pdf.save(fileName);
+
+            // Notificar éxito al usuario
+            console.log(`PDF generado exitosamente: ${fileName}`);
+
+            // Limpieza
+            document.body.removeChild(tempContainer);
+        }).catch(err => {
+            console.error("Error al generar el PDF:", err);
+            document.body.removeChild(tempContainer);
+
+            // Mostrar error detallado
+            const errorMsg = `Error técnico: ${err.message || 'Error desconocido al procesar el contenido'}`;
+            console.error(errorMsg);
+        });
+    };
+
+    // Función para aplicar estilos específicos según el formato
+    function applyFormatSpecificStyles(container, format, scaleFactor) {
+        // Aplicar factor de escala general
+        container.style.transform = `scale(${scaleFactor})`;
+        container.style.transformOrigin = 'top left';
+
+        // Ajustar fuentes según el formato
+        const baseFontSize = getBaseFontSize(format);
+
+        // Aplicar estilos a todos los elementos de texto
+        const textElements = container.querySelectorAll('*');
+        textElements.forEach(element => {
+            const computedStyle = window.getComputedStyle(element);
+            const currentFontSize = parseFloat(computedStyle.fontSize);
+
+            if (currentFontSize > 0) {
+                // Ajustar tamaño de fuente según el formato
+                let newFontSize;
+                if (format.includes('ticket-58')) {
+                    newFontSize = Math.max(8, currentFontSize * 0.6);
+                } else if (format.includes('ticket-80') || format.includes('pos-80')) {
+                    newFontSize = Math.max(10, currentFontSize * 0.7);
+                } else if (format.includes('legal')) {
+                    newFontSize = Math.max(11, currentFontSize * 1.1);
+                } else if (format.includes('folio')) {
+                    newFontSize = Math.max(10, currentFontSize * 1.05);
+                } else {
+                    newFontSize = currentFontSize;
+                }
+                element.style.fontSize = newFontSize + 'px';
+            }
+
+            // Ajustar padding y margin para formatos pequeños
+            if (format.includes('ticket') || format.includes('pos-80')) {
+                element.style.padding = '2px';
+                element.style.margin = '1px 0';
+            } else if (format.includes('legal') || format.includes('folio')) {
+                element.style.padding = '4px';
+                element.style.margin = '3px 0';
+            }
+        });
+
+        // Ajustar tablas específicamente
+        const tables = container.querySelectorAll('table');
+        tables.forEach(table => {
+            table.style.width = '100%';
+            table.style.borderCollapse = 'collapse';
+            table.style.fontSize = getTableFontSize(format) + 'px';
+
+            // Ajustar celdas de la tabla
+            const cells = table.querySelectorAll('td, th');
+            cells.forEach(cell => {
+                if (format.includes('ticket-58')) {
+                    cell.style.padding = '2px';
+                    cell.style.fontSize = '8px';
+                } else if (format.includes('ticket-80') || format.includes('pos-80')) {
+                    cell.style.padding = '3px';
+                    cell.style.fontSize = '10px';
+                } else if (format.includes('legal')) {
+                    cell.style.padding = '10px';
+                    cell.style.fontSize = '11px';
+                } else if (format.includes('folio')) {
+                    cell.style.padding = '9px';
+                    cell.style.fontSize = '10.5px';
+                } else {
+                    cell.style.padding = '8px';
+                }
+                cell.style.border = '1px solid #ddd';
+                cell.style.wordWrap = 'break-word';
+            });
+        });
+
+        // Ajustar imágenes y logos
+        const images = container.querySelectorAll('img');
+        images.forEach(img => {
+            // Verificar si es un logo (generalmente las primeras imágenes en el documento)
+            const isLogo = img.alt && img.alt.toLowerCase().includes('logo');
+
+            if (format.includes('ticket-58')) {
+                if (isLogo) {
+                    img.style.maxWidth = '45mm';
+                    img.style.maxHeight = '20mm';
+                } else {
+                    img.style.maxWidth = '50mm';
+                }
+                img.style.height = 'auto';
+            } else if (format.includes('ticket-80') || format.includes('pos-80')) {
+                if (isLogo) {
+                    img.style.maxWidth = '60mm';
+                    img.style.maxHeight = '25mm';
+                } else {
+                    img.style.maxWidth = '70mm';
+                }
+                img.style.height = 'auto';
+            } else if (format.includes('legal')) {
+                if (isLogo) {
+                    img.style.maxWidth = '80mm';
+                    img.style.maxHeight = '40mm';
+                } else {
+                    img.style.maxWidth = '200mm';
+                }
+                img.style.height = 'auto';
+            } else if (format.includes('folio')) {
+                if (isLogo) {
+                    img.style.maxWidth = '70mm';
+                    img.style.maxHeight = '35mm';
+                } else {
+                    img.style.maxWidth = '180mm';
+                }
+                img.style.height = 'auto';
+            } else {
+                if (isLogo) {
+                    img.style.maxWidth = '60mm';
+                    img.style.maxHeight = '30mm';
+                } else {
+                    img.style.maxWidth = '100%';
+                }
+                img.style.height = 'auto';
+            }
+
+            // Estilos adicionales para logos
+            if (isLogo) {
+                img.style.display = 'block';
+                img.style.margin = '0 auto 10px auto';
+                img.style.borderRadius = '5px';
+                img.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+            }
+        });
+
+        // Ajustar títulos y encabezados
+        const headings = container.querySelectorAll('h1, h2, h3, h4, h5, h6');
+        headings.forEach(heading => {
+            const level = parseInt(heading.tagName.charAt(1));
+            let fontSize;
+
+            if (format.includes('ticket-58')) {
+                fontSize = Math.max(10, 16 - level * 1);
+            } else if (format.includes('ticket-80') || format.includes('pos-80')) {
+                fontSize = Math.max(12, 18 - level * 1);
+            } else if (format.includes('legal')) {
+                fontSize = Math.max(16, 28 - level * 2);
+            } else if (format.includes('folio')) {
+                fontSize = Math.max(15, 26 - level * 2);
+            } else {
+                fontSize = Math.max(14, 24 - level * 2);
+            }
+
+            heading.style.fontSize = fontSize + 'px';
+            heading.style.lineHeight = '1.2';
+            if (format.includes('ticket') || format.includes('pos-80')) {
+                heading.style.margin = '2px 0';
+            } else if (format.includes('legal') || format.includes('folio')) {
+                heading.style.margin = '8px 0';
+            } else {
+                heading.style.margin = '5px 0';
+            }
+        });
+    }
+
+    // Función específica para aplicar estilos a formatos de ticket
+    function applyTicketStyles(container, format) {
+        // Configurar el contenedor principal
+        container.style.width = '100%';
+        container.style.maxWidth = '100%';
+        container.style.margin = '0';
+        container.style.padding = '0';
+        container.style.fontSize = format === 'ticket-58' ? '8px' : '10px';
+        container.style.lineHeight = '1.1';
+
+        // Ajustar todas las tablas para tickets
+        const tables = container.querySelectorAll('table');
+        tables.forEach(table => {
+            table.style.width = '100%';
+            table.style.borderCollapse = 'collapse';
+            table.style.fontSize = format === 'ticket-58' ? '7px' : '8px';
+            table.style.margin = '0';
+
+            // Ajustar celdas
+            const cells = table.querySelectorAll('td, th');
+            cells.forEach(cell => {
+                cell.style.padding = format === 'ticket-58' ? '1px' : '2px';
+                cell.style.fontSize = format === 'ticket-58' ? '7px' : '8px';
+                cell.style.border = '1px solid #000';
+                cell.style.wordWrap = 'break-word';
+                cell.style.wordBreak = 'break-word';
+            });
+        });
+
+        // Ajustar divs y contenedores
+        const divs = container.querySelectorAll('div');
+        divs.forEach(div => {
+            div.style.fontSize = format === 'ticket-58' ? '7px' : '8px';
+            div.style.lineHeight = '1.1';
+            div.style.margin = '2px 0';
+            div.style.padding = '1px';
+        });
+
+        // Ajustar títulos
+        const headings = container.querySelectorAll('h1, h2, h3, h4, h5, h6');
+        headings.forEach(heading => {
+            const level = parseInt(heading.tagName.charAt(1));
+            let fontSize = format === 'ticket-58' ?
+                Math.max(8, 12 - level) :
+                Math.max(10, 14 - level);
+
+            heading.style.fontSize = fontSize + 'px';
+            heading.style.lineHeight = '1.1';
+            heading.style.margin = '2px 0';
+            heading.style.fontWeight = 'bold';
+        });
+
+        // Ajustar imágenes (logos)
+        const images = container.querySelectorAll('img');
+        images.forEach(img => {
+            if (format === 'ticket-58') {
+                img.style.maxWidth = '50mm';
+                img.style.maxHeight = '20mm';
+            } else {
+                img.style.maxWidth = '60mm';
+                img.style.maxHeight = '25mm';
+            }
+            img.style.height = 'auto';
+            img.style.display = 'block';
+            img.style.margin = '0 auto 5px auto';
+        });
+
+        // Forzar ancho máximo en elementos que podrían desbordarse
+        const allElements = container.querySelectorAll('*');
+        allElements.forEach(element => {
+            element.style.maxWidth = '100%';
+            element.style.boxSizing = 'border-box';
+        });
+    }
+
+    // Función para obtener el factor de escala según el formato
+    function getScaleFactor(format) {
+        switch (format) {
+            case 'ticket-58': return 0.8;
+            case 'ticket-80':
+            case 'pos-80': return 0.9;
+            case 'legal-v':
+            case 'legal-h': return 1.1;
+            case 'folio-v':
+            case 'folio-h': return 1.05;
+            default: return 1.0;
+        }
+    }
+
+    // Función para obtener el tamaño base de fuente
+    function getBaseFontSize(format) {
+        switch (format) {
+            case 'ticket-58': return 8;
+            case 'ticket-80':
+            case 'pos-80': return 10;
+            case 'legal-v':
+            case 'legal-h': return 13;
+            case 'folio-v':
+            case 'folio-h': return 12.5;
+            default: return 12;
+        }
+    }
+
+    // Función para obtener el tamaño de fuente de tablas
+    function getTableFontSize(format) {
+        switch (format) {
+            case 'ticket-58': return 7;
+            case 'ticket-80':
+            case 'pos-80': return 9;
+            case 'legal-v':
+            case 'legal-h': return 12;
+            case 'folio-v':
+            case 'folio-h': return 11.5;
+            default: return 11;
+        }
+    }
+
+    function getPdfDimensions(format) {
+        switch (format) {
+            case 'a4-h':
+                return { width: 297, height: 210, orientation: 'landscape', formatArray: 'a4', padding: 10 };
+            case 'ticket-80':
+            case 'pos-80':
+                return { width: 80, height: 297, orientation: 'portrait', formatArray: [80, 297], padding: 3 };
+            case 'ticket-58':
+                return { width: 58, height: 297, orientation: 'portrait', formatArray: [58, 297], padding: 2 };
+            case 'letter-v':
+                return { width: 216, height: 279, orientation: 'portrait', formatArray: 'letter', padding: 10 };
+            case 'letter-h':
+                return { width: 279, height: 216, orientation: 'landscape', formatArray: 'letter', padding: 10 };
+            case 'legal-v':
+                return { width: 216, height: 330, orientation: 'portrait', formatArray: [612, 936], padding: 12 };
+            case 'legal-h':
+                return { width: 330, height: 216, orientation: 'landscape', formatArray: [936, 612], padding: 12 };
+            case 'folio-v':
+                return { width: 216, height: 305, orientation: 'portrait', formatArray: [612, 864], padding: 11 };
+            case 'folio-h':
+                return { width: 305, height: 216, orientation: 'landscape', formatArray: [864, 612], padding: 11 };
+            case 'a4-v':
+            default:
+                return { width: 210, height: 297, orientation: 'portrait', formatArray: 'a4', padding: 10 };
+        }
+    }
+
+    window.readDocxFile = function(base64) {
+        return new Promise((resolve, reject) => {
+            try {
+                const byteCharacters = atob(base64);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const arrayBuffer = byteArray.buffer;
+
+                mammoth.convertToHtml({ arrayBuffer: arrayBuffer })
+                    .then(function(result) {
+                        resolve(result.value);
+                    })
+                    .catch(function(error) {
+                        console.error(error);
+                        reject('Error converting document');
+                    });
+            } catch (error) {
+                console.error(error);
+                reject('Error processing file');
+            }
+        });
+    };
+</script>

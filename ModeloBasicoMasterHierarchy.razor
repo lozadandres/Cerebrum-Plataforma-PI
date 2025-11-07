@@ -1,0 +1,1284 @@
+﻿@page "/Basicos/ModeloBasicoMasterHierarchy/{ptabla}"
+@rendermode InteractiveServer
+@using Npgsql
+@using System.Data
+@using System.Dynamic
+@using Microsoft.Extensions.Configuration
+@using Microsoft.JSInterop
+@using System.IO
+@using System.Text
+@using System.Net.Http
+@using Syncfusion.XlsIO
+@using Syncfusion.Drawing
+@using Syncfusion.Pdf
+@using Syncfusion.Pdf.Graphics
+@using Syncfusion.Pdf.Grid
+@using Syncfusion.Pdf.Interactive
+@inject IJSRuntime JSRuntime
+@inject IConfiguration config
+@inject NotificationService NotificationService
+@inject HttpClient HttpClient
+
+<PageTitle>@titulo</PageTitle>
+<h2>@titulo</h2>
+<br />
+
+<div id="ControlRegion">
+    <div class="container-fluid mt-3">
+        @try
+        {
+            <div class="row">
+                @if (visibleMessage)
+                {
+                    <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+                        @msgError
+                    </RadzenAlert>
+                }
+
+                <!-- Panel de Filtros -->
+                <RadzenCard class="mb-3">
+                    <RadzenText TextStyle="TextStyle.Subtitle2" TagName="TagName.H3">Filtros</RadzenText>
+                    <RadzenRow Gap="1rem" Style="width: 500px">
+                        @for (int i = 0; i < Math.Min(camposvisibles?.Length ?? 0, 3); i++)
+                        {
+                            int fieldIndex = i;
+                            string fieldTitle = (titulos != null && titulos.Length > i) ? titulos[i] : $"Campo {i + 1}";
+                            <RadzenColumn Size="12" SizeMD="4">
+                                <RadzenFormField Text="@fieldTitle" Variant="Variant.Outlined">
+                                    <RadzenTextBox @bind-Value="@filterValues[fieldIndex]" Change="@(args => ApplyFilters())" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                        }
+                    </RadzenRow>
+                    <RadzenRow class="mt-2">
+                        <RadzenColumn>
+                            <RadzenButton Text="Aplicar Filtros" Icon="filter_alt" ButtonStyle="ButtonStyle.Primary" Click="@ApplyFilters" />
+                            <RadzenButton Text="Limpiar Filtros" Icon="clear" ButtonStyle="ButtonStyle.Light" Click="@ClearFilters" class="ml-2" />
+                        </RadzenColumn>
+                    </RadzenRow>
+                </RadzenCard>
+
+                <RadzenDataGrid @ref="grid" AllowColumnPicking="true" AllowFiltering="true" AllowPaging="true" AllowSorting="true"
+                                Data="@FilteredOrders" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                PageSize="50" ShowPagingSummary="true"
+                                EmptyText="No se encontraron datos"
+                                ExpandMode="DataGridExpandMode.Multiple">
+
+                    <HeaderTemplate>
+                        <RadzenStack Orientation="Radzen.Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem;" Wrap="FlexWrap.Wrap">
+                            <RadzenButton Text="Export XLS" Icon="grid_on" Click="@(args => Export("excel"))" />
+                            <RadzenButton Text="Export CSV" Icon="wrap_text" Click="@(args => Export("csv"))" />
+                            <RadzenButton Text="Export PDF" Icon="picture_as_pdf" Click="@(args => Export("pdf"))" />
+                        </RadzenStack>
+                    </HeaderTemplate>
+
+                    <Template Context="order">
+                        <RadzenCard Style="margin: 0.5rem; padding: 0.5rem; background-color: #f8f9fa;">
+                            <RadzenText TextStyle="TextStyle.Subtitle2" TagName="TagName.H4" class="mb-2">
+                                Ciudades relacionadas con el departamento: @order.vcampo2
+                            </RadzenText>
+                            <RadzenDataGrid AllowFiltering="false" AllowPaging="false" AllowSorting="false"
+                                            Data="@order.Ciudades" TItem="Ciudad" Style="margin-left: 0.5rem;">
+                                <Columns>
+                                    <RadzenDataGridColumn TItem="Ciudad" Property="vcampo1" Title="Código Ciudad" Width="120px" />
+                                    <RadzenDataGridColumn TItem="Ciudad" Property="vcampo2" Title="Nombre Ciudad" Width="200px" />
+                                    <RadzenDataGridColumn TItem="Ciudad" Property="vcampo3" Title="Código Dane" Width="150px" />
+                                    <RadzenDataGridColumn TItem="Ciudad" Property="vcampo4" Title="País" Width="150px" />
+                                </Columns>
+                            </RadzenDataGrid>
+                        </RadzenCard>
+                    </Template>
+
+                    <Columns>
+                        <RadzenDataGridColumn TItem="Order" Sortable="false" Filterable="false" Width="60px">
+                            <HeaderTemplate>
+                                <RadzenCheckBox @bind-Value="@selectAll" Change="@((bool value) => SelectAllRows(value))" />
+                            </HeaderTemplate>
+                            <Template Context="order">
+                                <RadzenCheckBox @bind-Value="@order.Selected" />
+                            </Template>
+                        </RadzenDataGridColumn>
+
+
+
+                        @if (camposvisibles != null && camposvisibles.Length > 0)
+                        {
+                            @for (int k = 0; k < camposvisibles.Length; k++)
+                            {
+                                int ifield = Convert.ToInt32(camposvisibles[k]) - 1;
+                                string xancho = (anchos != null && ifield < anchos.Length) ? anchos[ifield] : "150";
+
+                                @if (k == 0)
+                                {
+                                    @if (tipos != null && ifield < tipos.Length && tipos[ifield] == "d")
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo1" Title="@(titulos != null && titulos.Length > 0 ? titulos[0] : "Campo 1")" FormatString="{0:yyyy-MM-dd}" Width="@xancho" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo1" Title="@(titulos != null && titulos.Length > 0 ? titulos[0] : "Campo 1")" Width="@xancho" />
+                                    }
+                                }
+                                @if (k == 1)
+                                {
+                                    @if (tipos != null && ifield < tipos.Length && tipos[ifield] == "d")
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo2" Title="@(titulos != null && titulos.Length > k ? titulos[k] : "Campo 2")" FormatString="{0:yyyy-MM-dd}" Width="@xancho" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo2" Title="@(titulos != null && titulos.Length > 1 ? titulos[1] : "Campo 2")" Width="@xancho" />
+                                    }
+                                }
+                                @if (k == 2)
+                                {
+                                    @if (tipos != null && ifield < tipos.Length && tipos[ifield] == "d")
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo3" Title="@(titulos != null && titulos.Length > k ? titulos[k] : "Campo 3")" FormatString="{0:yyyy-MM-dd}" Width="@xancho" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo3" Title="@(titulos != null && titulos.Length > 2 ? titulos[2] : "Campo 3")" Width="@xancho" />
+                                    }
+                                }
+                                @if (k == 3)
+                                {
+                                    @if (tipos != null && ifield < tipos.Length && tipos[ifield] == "d")
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo4" Title="@(titulos != null && titulos.Length > k ? titulos[k] : "Campo 4")" FormatString="{0:yyyy-MM-dd}" Width="@xancho" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo4" Title="@(titulos != null && titulos.Length > 3 ? titulos[3] : "Campo 4")" Width="@xancho" />
+                                    }
+                                }
+                                @if (k == 4)
+                                {
+                                    @if (tipos != null && ifield < tipos.Length && tipos[ifield] == "d")
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo5" Title="@(titulos != null && titulos.Length > k ? titulos[k] : "Campo 5")" FormatString="{0:yyyy-MM-dd}" Width="@xancho" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo5" Title="@(titulos != null && titulos.Length > 4 ? titulos[4] : "Campo 5")" Width="@xancho" />
+                                    }
+                                }
+                                @if (k == 5)
+                                {
+                                    @if (tipos != null && ifield < tipos.Length && tipos[ifield] == "d")
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo6" Title="@(titulos != null && titulos.Length > k ? titulos[k] : "Campo 6")" FormatString="{0:yyyy-MM-dd}" Width="@xancho" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo6" Title="@(titulos != null && titulos.Length > 5 ? titulos[5] : "Campo 6")" Width="@xancho" />
+                                    }
+                                }
+                                @if (k == 6)
+                                {
+                                    @if (tipos != null && ifield < tipos.Length && tipos[ifield] == "d")
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo7" Title="@(titulos != null && titulos.Length > k ? titulos[k] : "Campo 7")" FormatString="{0:yyyy-MM-dd}" Width="@xancho" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo7" Title="@(titulos != null && titulos.Length > k ? titulos[k] : "Campo 7")" Width="@xancho" />
+                                    }
+                                }
+                                @if (k == 7)
+                                {
+                                    @if (tipos != null && ifield < tipos.Length && tipos[ifield] == "d")
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo8" Title="@(titulos != null && titulos.Length > k ? titulos[k] : "Campo 8")" FormatString="{0:yyyy-MM-dd}" Width="@xancho" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo8" Title="@(titulos != null && titulos.Length > k ? titulos[k] : "Campo 8")" Width="@xancho" />
+                                    }
+                                }
+                                @if (k == 8)
+                                {
+                                    @if (tipos != null && ifield < tipos.Length && tipos[ifield] == "d")
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo9" Title="@(titulos != null && titulos.Length > k ? titulos[k] : "Campo 9")" FormatString="{0:yyyy-MM-dd}" Width="@xancho" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo9" Title="@(titulos != null && titulos.Length > k ? titulos[k] : "Campo 9")" Width="@xancho" />
+                                    }
+                                }
+                                @if (k == 9)
+                                {
+                                    @if (tipos != null && ifield < tipos.Length && tipos[ifield] == "d")
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo10" Title="@(titulos != null && titulos.Length > k ? titulos[k] : "Campo 10")" FormatString="{0:yyyy-MM-dd}" Width="@xancho" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenDataGridColumn TItem="Order" Property="vcampo10" Title="@(titulos != null && titulos.Length > k ? titulos[k] : "Campo 10")" Width="@xancho" />
+                                    }
+                                }
+                            }
+                        }
+                    </Columns>
+                </RadzenDataGrid>
+            </div>
+        }
+        catch (Exception e0)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+                @e0.Message
+            </RadzenAlert>
+        }
+    </div>
+</div>
+<br />
+
+<script>
+    function BlazorDownloadFile(fileName, contentType, content) {
+        const link = document.createElement('a');
+        link.href = `data:${contentType};base64,${content}`;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+</script>
+
+@code {
+    [Parameter]
+    public string ptabla { get; set; } = "";
+
+    public List<Order>? Orders { get; set; }
+    public List<Order>? FilteredOrders { get; set; }
+    private RadzenDataGrid<Order> grid;
+    private bool selectAll = false;
+    private string[] filterValues = new string[10]; // Para almacenar los valores de filtro
+
+    // Variables de configuracion
+    System.Data.DataRow drmodelo;
+    NpgsqlConnection cone = null;
+    NpgsqlDataAdapter daprod = null;
+    NpgsqlCommandBuilder cbprod = null;
+    System.Data.DataSet dsprod = null;
+    System.Data.DataSet dstabs = null, dsreglas;
+    System.Data.DataSet dstablas = new System.Data.DataSet();
+    System.Data.DataSet dscb = new System.Data.DataSet();
+    NpgsqlTransaction trans = null;
+    System.Data.DataRow[] drcamp = null;
+
+    string xcadena = "";
+    string xmotor = "PG";
+    bool newRecord = false;
+    string msgError = "";
+    bool visibleMessage = false;
+    string titulo = "";
+    System.Data.DataRow drforma;
+
+    public string[] campos = Array.Empty<string>();
+    public string[] etiquetas = Array.Empty<string>();
+    public string[] tipos = Array.Empty<string>();
+    public string[] llaves = Array.Empty<string>();
+    public string[] anchos = Array.Empty<string>();
+    public string[] lsFields = Array.Empty<string>();
+    public string[] lsRows = Array.Empty<string>();
+    public string[] titulos = Array.Empty<string>();
+    public string[] camposvisibles = Array.Empty<string>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarConfiguracionFormulario();
+        FilteredOrders = Orders; // Inicializar los datos filtrados con todos los datos
+        StateHasChanged();
+    }
+
+    private void ApplyFilters()
+    {
+        if (Orders == null)
+            return;
+
+        FilteredOrders = Orders.Where(order =>
+        {
+            bool match = true;
+
+            // Verificar cada filtro aplicado
+            for (int i = 0; i < filterValues.Length && i < camposvisibles?.Length; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(filterValues[i]))
+                {
+                    string filterValue = filterValues[i].ToLower();
+                    string fieldValue = "";
+
+                    // Obtener el valor del campo correspondiente
+                    switch (i)
+                    {
+                        case 0: fieldValue = order.vcampo1?.ToLower() ?? ""; break;
+                        case 1: fieldValue = order.vcampo2?.ToLower() ?? ""; break;
+                        case 2: fieldValue = order.vcampo3?.ToLower() ?? ""; break;
+                        case 3: fieldValue = order.vcampo4?.ToLower() ?? ""; break;
+                        case 4: fieldValue = order.vcampo5?.ToLower() ?? ""; break;
+                        case 5: fieldValue = order.vcampo6?.ToLower() ?? ""; break;
+                        case 6: fieldValue = order.vcampo7?.ToLower() ?? ""; break;
+                        case 7: fieldValue = order.vcampo8?.ToLower() ?? ""; break;
+                        case 8: fieldValue = order.vcampo9?.ToLower() ?? ""; break;
+                        case 9: fieldValue = order.vcampo10?.ToLower() ?? ""; break;
+                    }
+
+                    // Si el valor del campo no contiene el filtro, no es una coincidencia
+                    if (!fieldValue.Contains(filterValue))
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+            }
+
+            return match;
+        }).ToList();
+
+        StateHasChanged();
+    }
+
+    private void ClearFilters()
+    {
+        // Limpiar todos los valores de filtro
+        for (int i = 0; i < filterValues.Length; i++)
+        {
+            filterValues[i] = "";
+        }
+
+        // Restaurar todos los datos
+        FilteredOrders = Orders;
+        StateHasChanged();
+    }
+
+    private async Task CargarConfiguracionFormulario()
+    {
+        string lstFields = "", xsql = "";
+        System.Data.DataRow drn = null;
+
+        // la misma logica que ModeloBasico30.razor
+        xcadena = config["DbConnection0"] ?? config["DbConnection"];
+
+        // Si no esta configurado, usar la cadena de conexion por defecto de SNERP
+        if (string.IsNullOrEmpty(xcadena))
+        {
+            xcadena = "user id=postgres;password=xxxxx;database=nameDB;server=xxxxx;";
+        }
+
+        try
+        {
+            cone = new NpgsqlConnection(xcadena);
+            cone.Open();
+
+            // Cargar configuracion de parametros del formulario
+            NpgsqlDataAdapter da0 = new NpgsqlDataAdapter("select * from formulariosparametros where casotabla='" + ptabla + "'", cone);
+            System.Data.DataSet ds0 = new System.Data.DataSet();
+            da0.Fill(ds0);
+
+            if (ds0.Tables[0].Rows.Count == 0)
+            {
+                msgError = $"No se encontr� configuraci�n para la tabla: {ptabla}";
+                visibleMessage = true;
+                return;
+            }
+
+            drforma = ds0.Tables[0].Rows[0];
+
+            // Cargar configuracion de campos de tablas
+            da0.SelectCommand.CommandText = "select * from formulariostablascampos where casotabla='" + ptabla + "'";
+            dscb = new System.Data.DataSet();
+            da0.Fill(dscb);
+
+            // Cargar reglas del formulario
+            da0.SelectCommand.CommandText = "select * from formulariosreglas where casotabla='" + ptabla + "'";
+            dsreglas = new System.Data.DataSet();
+            da0.Fill(dsreglas);
+
+            // Cargar configuracion de tabs
+            da0.SelectCommand.CommandText = "select * from formulariostabs where casotabla='" + ptabla + "' order by nro";
+            dstabs = new System.Data.DataSet();
+            da0.Fill(dstabs);
+
+            if (dstabs.Tables[0].Rows.Count == 0)
+            {
+                drn = dstabs.Tables[0].NewRow();
+                drn["casotabla"] = ptabla;
+                drn["nro"] = 1;
+                drn["descripcion"] = "Datos B�sicos";
+                dstabs.Tables[0].Rows.Add(drn);
+            }
+
+            // Cargar configuracion de tablas relacionadas
+            da0.SelectCommand.CommandText = "select * from formulariostablas where casotabla='" + ptabla + "'";
+            da0.Fill(dstablas);
+
+            cone.Close();
+
+            // Procesar configuracion
+            titulo = drforma["titulo"].ToString();
+            lstFields = drforma["campocodigo"].ToString() + "," + drforma["camponombre"].ToString();
+            if (drforma["otroscampos"].ToString() != "")
+                lstFields += "," + drforma["otroscampos"].ToString();
+            campos = lstFields.Split(',');
+
+            lsFields = drforma["camponombre"].ToString().Split(',');
+            etiquetas = drforma["filtrostextos"].ToString().Split(',');
+            llaves = drforma["llaves"].ToString().Split(',');
+            tipos = drforma["tiposdatos"].ToString().Split(',');
+            anchos = drforma["anchos"].ToString().Split(',');
+            lsRows = drforma["botonesbusqueda"].ToString().Split(',');
+            titulos = drforma["filtrotitulos"].ToString().Split(',');
+            camposvisibles = drforma["filtroscampos"].ToString().Split(',');
+
+            // Procesar tipos de datos desde la configuracion de campos
+            await ProcesarTiposDatos();
+
+            // Procesar etiquetas desde la configuracion de campos
+            await ProcesarEtiquetas();
+
+            // Procesar anchos desde la configuracion de campos
+            await ProcesarAnchos();
+
+            // Cambiar a la cadena de conexi�n principal para los datos
+            xcadena = config["DbConnection"];
+            if (string.IsNullOrEmpty(xcadena))
+            {
+                xcadena = "user id=postgres;password=xxxxx;database=nameDB;server=xxxxx;";
+            }
+
+            // Cargar datos de la tabla
+            await CargarDatos();
+        }
+        catch (Exception ex)
+        {
+            msgError = ex.Message;
+            visibleMessage = true;
+        }
+        finally
+        {
+            if (cone?.State == ConnectionState.Open)
+                cone.Close();
+        }
+    }
+
+    private async Task ProcesarTiposDatos()
+    {
+        int xpos = 0;
+        if (tipos.Length != campos.Length)
+        {
+            tipos = new string[campos.Length];
+            foreach (string xf in campos)
+            {
+                drcamp = dscb.Tables[0].Select("campo='" + xf + "'");
+                if (drcamp.Length != 0)
+                {
+                    tipos[xpos] = drcamp[0]["tipodato"].ToString();
+                }
+                else
+                {
+                    tipos[xpos] = "'"; // default text
+                }
+                xpos++;
+            }
+        }
+    }
+
+    private async Task ProcesarEtiquetas()
+    {
+        int xpos = 0;
+        if (etiquetas.Length != campos.Length)
+        {
+            etiquetas = new string[campos.Length];
+            foreach (string xf in campos)
+            {
+                drcamp = dscb.Tables[0].Select("campo='" + xf + "'");
+                if (drcamp.Length != 0)
+                {
+                    etiquetas[xpos] = drcamp[0]["etiquetacrud"].ToString();
+                }
+                else
+                {
+                    etiquetas[xpos] = xf; // default text
+                }
+                xpos++;
+            }
+        }
+    }
+
+    private async Task ProcesarAnchos()
+    {
+        int xpos = 0;
+        if (anchos.Length != campos.Length)
+        {
+            anchos = new string[campos.Length];
+            foreach (string xf in campos)
+            {
+                drcamp = dscb.Tables[0].Select("campo='" + xf + "'");
+                if (drcamp.Length != 0)
+                {
+                    anchos[xpos] = drcamp[0]["anchocrud"].ToString();
+                }
+                else
+                {
+                    anchos[xpos] = "150"; // default width
+                }
+                xpos++;
+            }
+        }
+    }
+
+    private async Task CargarDatos()
+    {
+        try
+        {
+            cone = new NpgsqlConnection(xcadena);
+            cone.Open();
+
+            // Modificar la consulta para obtener solo departamentos únicos
+            string sqlDepartamentos = "";
+            if (drforma["primersql"].ToString().ToLower().Contains("uciudades"))
+            {
+                // Si la consulta original es de ciudades, modificarla para obtener departamentos
+                sqlDepartamentos = @"select distinct t1.codigodepartamento, t1.nombredepartamento,
+                                   t1.codigodanedepartamento, t2.nombrepais, t1.codigopais
+                                   from udepartamentos as t1
+                                   left join upaises as t2 on t1.codigopais = t2.codigopais
+                                   order by t1.nombredepartamento";
+            }
+            else
+            {
+                // Usar la consulta original si no es de ciudades
+                sqlDepartamentos = drforma["primersql"].ToString() + " order by " + drforma["campoorden"].ToString();
+            }
+
+            NpgsqlDataAdapter da = new NpgsqlDataAdapter(sqlDepartamentos, cone);
+            System.Data.DataSet ds = new System.Data.DataSet();
+            da.Fill(ds);
+
+            Orders = new List<Order>();
+            int i = 0, j = 0, k = 0;
+
+            foreach (System.Data.DataRow dr in ds.Tables[0].Rows)
+            {
+                Order xorder = new Order();
+                i = 0;
+                j = 0;
+
+                foreach (string xfield in campos)
+                {
+                    i++;
+                    valueField iField = new valueField();
+                    iField.fType = tipos[i - 1];
+                    iField.Name = campos[i - 1];
+                    // Verificar si el campo existe en el DataRow
+                    if (ds.Tables[0].Columns.Contains(xfield))
+                    {
+                        iField.vText = "" + dr[xfield].ToString();
+                    }
+                    else
+                    {
+                        iField.vText = "";
+                    }
+
+                    if (llaves.Contains(xfield))
+                        iField.keyLock = false;
+                    else
+                        iField.keyLock = true;
+
+                    if (tipos[i - 1] == "d")
+                    {
+                        if (!string.IsNullOrEmpty(iField.vText))
+                            iField.vDate = Convert.ToDateTime(iField.vText);
+
+                        switch (i)
+                        {
+                            case 1: xorder.fields1 = iField; xorder.fields1.vDate = iField.vDate; break;
+                            case 2: xorder.fields2 = iField; xorder.fields2.vDate = iField.vDate; break;
+                            case 3: xorder.fields3 = iField; xorder.fields3.vDate = iField.vDate; break;
+                            case 4: xorder.fields4 = iField; xorder.fields4.vDate = iField.vDate; break;
+                            case 5: xorder.fields5 = iField; xorder.fields5.vDate = iField.vDate; break;
+                            case 6: xorder.fields6 = iField; xorder.fields6.vDate = iField.vDate; break;
+                            case 7: xorder.fields7 = iField; xorder.fields7.vDate = iField.vDate; break;
+                            case 8: xorder.fields8 = iField; xorder.fields8.vDate = iField.vDate; break;
+                            case 9: xorder.fields9 = iField; xorder.fields9.vDate = iField.vDate; break;
+                            case 10: xorder.fields10 = iField; xorder.fields10.vDate = iField.vDate; break;
+                        }
+                    }
+                    else if (tipos[i - 1] == "n") // numero
+                    {
+                        if (iField.vText == "")
+                            iField.vNum = 0;
+                        else
+                            iField.vNum = Convert.ToDouble(iField.vText);
+
+                        switch (i)
+                        {
+                            case 1: xorder.fields1 = iField; break;
+                            case 2: xorder.fields2 = iField; break;
+                            case 3: xorder.fields3 = iField; break;
+                            case 4: xorder.fields4 = iField; break;
+                            case 5: xorder.fields5 = iField; break;
+                            case 6: xorder.fields6 = iField; break;
+                            case 7: xorder.fields7 = iField; break;
+                            case 8: xorder.fields8 = iField; break;
+                            case 9: xorder.fields9 = iField; break;
+                            case 10: xorder.fields10 = iField; break;
+                        }
+                    }
+                    else
+                    {
+                        switch (i)
+                        {
+                            case 1: xorder.fields1 = iField; break;
+                            case 2: xorder.fields2 = iField; break;
+                            case 3: xorder.fields3 = iField; break;
+                            case 4: xorder.fields4 = iField; break;
+                            case 5: xorder.fields5 = iField; break;
+                            case 6: xorder.fields6 = iField; break;
+                            case 7: xorder.fields7 = iField; break;
+                            case 8: xorder.fields8 = iField; break;
+                            case 9: xorder.fields9 = iField; break;
+                            case 10: xorder.fields10 = iField; break;
+                        }
+                    }
+                }
+
+                // Mapear campos visibles a vcampo1, vcampo2, etc.
+                string xvalue = "";
+                for (j = 0; j < camposvisibles.Length; j++)
+                {
+                    k = Convert.ToInt32(camposvisibles[j]);
+                    i = j + 1;
+
+                    switch (k)
+                    {
+                        case 1: xvalue = xorder.fields1?.vText ?? ""; break;
+                        case 2: xvalue = xorder.fields2?.vText ?? ""; break;
+                        case 3: xvalue = xorder.fields3?.vText ?? ""; break;
+                        case 4: xvalue = xorder.fields4?.vText ?? ""; break;
+                        case 5: xvalue = xorder.fields5?.vText ?? ""; break;
+                        case 6: xvalue = xorder.fields6?.vText ?? ""; break;
+                        case 7: xvalue = xorder.fields7?.vText ?? ""; break;
+                        case 8: xvalue = xorder.fields8?.vText ?? ""; break;
+                        case 9: xvalue = xorder.fields9?.vText ?? ""; break;
+                        case 10: xvalue = xorder.fields10?.vText ?? ""; break;
+                    }
+
+                    switch (i)
+                    {
+                        case 1: xorder.vcampo1 = xvalue; break;
+                        case 2: xorder.vcampo2 = xvalue; break;
+                        case 3: xorder.vcampo3 = xvalue; break;
+                        case 4: xorder.vcampo4 = xvalue; break;
+                        case 5: xorder.vcampo5 = xvalue; break;
+                        case 6: xorder.vcampo6 = xvalue; break;
+                        case 7: xorder.vcampo7 = xvalue; break;
+                        case 8: xorder.vcampo8 = xvalue; break;
+                        case 9: xorder.vcampo9 = xvalue; break;
+                        case 10: xorder.vcampo10 = xvalue; break;
+                    }
+                }
+
+                xorder.vcampo0 = "";
+                for (int x = 0; x < llaves.Length; x++)
+                {
+                    if (ds.Tables[0].Columns.Contains(llaves[x]))
+                    {
+                        xorder.vcampo0 += "@" + dr[llaves[x]].ToString();
+                    }
+                }
+
+                Orders.Add(xorder);
+            }
+
+            cone.Close();
+
+            // Cargar automáticamente las ciudades para todos los departamentos
+            await CargarTodasLasCiudades();
+        }
+        catch (Exception ex)
+        {
+            msgError = ex.Message;
+            visibleMessage = true;
+            if (cone?.State == ConnectionState.Open)
+                cone.Close();
+        }
+    }
+
+    private void SelectAllRows(bool value)
+    {
+        if (Orders != null)
+        {
+            foreach (var order in Orders)
+            {
+                order.Selected = value;
+            }
+        }
+    }
+
+
+    private async Task CargarTodasLasCiudades()
+    {
+        try
+        {
+            if (Orders == null || !Orders.Any())
+                return;
+
+            // Cargar ciudades para todos los departamentos de una vez
+            using (NpgsqlConnection conn = new NpgsqlConnection(xcadena))
+            {
+                await conn.OpenAsync();
+
+                // Consulta SQL para obtener todas las ciudades con sus departamentos
+                string sql = @"select t3.codigociudad, t3.nombreciudad, t3.codigodepartamento,
+                               t1.codigodanedepartamento, t2.nombrepais
+                               from uciudades as t3
+                               inner join udepartamentos as t1 on t3.codigodepartamento = t1.codigodepartamento
+                               left join upaises as t2 on t1.codigopais = t2.codigopais
+                               order by t1.nombredepartamento, t3.nombreciudad";
+
+                using (NpgsqlCommand cmd = new NpgsqlCommand(sql, conn))
+                using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        string codigoDepartamento = reader["codigodepartamento"].ToString();
+
+                        // Buscar el departamento correspondiente en Orders
+                        var departamento = Orders.FirstOrDefault(o => o.vcampo1 == codigoDepartamento);
+
+                        if (departamento != null)
+                        {
+                            Ciudad ciudad = new Ciudad
+                            {
+                                CodigoCiudad = reader["codigociudad"].ToString(),
+                                NombreCiudad = reader["nombreciudad"].ToString(),
+                                CodigoDepartamento = reader["codigodepartamento"].ToString(),
+                                vcampo1 = reader["codigociudad"].ToString(),
+                                vcampo2 = reader["nombreciudad"].ToString(),
+                                vcampo3 = reader["codigodanedepartamento"]?.ToString(),
+                                vcampo4 = reader["nombrepais"]?.ToString()
+                            };
+
+                            departamento.Ciudades.Add(ciudad);
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", $"Error al cargar todas las ciudades: {ex.Message}");
+        }
+    }
+
+    public async Task Export(string type)
+    {
+        try
+        {
+            if (FilteredOrders == null || !FilteredOrders.Any())
+            {
+                NotificationService.Notify(NotificationSeverity.Warning, "Advertencia", "No hay datos para exportar.");
+                return;
+            }
+
+            NotificationService.Notify(NotificationSeverity.Info, "Información", $"Iniciando exportación a {type.ToUpper()}...");
+
+            var fileName = $"Export_{ptabla}_{DateTime.Now:yyyyMMddHHmmss}";
+            byte[] fileContent;
+
+            if (type == "pdf")
+            {
+                // Crear un nuevo documento PDF usando Syncfusion.Pdf
+                using (PdfDocument document = new PdfDocument())
+                {
+                    // Configurar márgenes del documento
+                    document.PageSettings.Margins.All = 50;
+
+                    // Crear fuentes
+                    PdfFont titleFont = new PdfStandardFont(PdfFontFamily.Helvetica, 16, PdfFontStyle.Bold);
+                    PdfFont headerFont = new PdfStandardFont(PdfFontFamily.Helvetica, 12, PdfFontStyle.Bold);
+                    PdfFont contentFont = new PdfStandardFont(PdfFontFamily.Helvetica, 10);
+                    PdfFont footerFont = new PdfStandardFont(PdfFontFamily.Helvetica, 8);
+                    PdfFont subHeaderFont = new PdfStandardFont(PdfFontFamily.Helvetica, 11, PdfFontStyle.Bold);
+
+                    // Variables para el encabezado y footer
+                    string nombreEmpresa = "SNERP - Sistema de Gestión Empresarial";
+                    DateTime fechaGeneracion = DateTime.Now;
+                    string fechaTexto = fechaGeneracion.ToString("dd/MM/yyyy");
+                    string horaTexto = fechaGeneracion.ToString("HH:mm:ss");
+
+                    // Crear template para encabezado y footer que se repita en todas las páginas
+                    PdfPageTemplateElement header = new PdfPageTemplateElement(new RectangleF(0, 0, document.PageSettings.Width, 80));
+                    PdfPageTemplateElement footer = new PdfPageTemplateElement(new RectangleF(0, 0, document.PageSettings.Width, 30));
+
+                    // Dibujar encabezado
+                    PdfGraphics headerGraphics = header.Graphics;
+
+                    // Logo desde URL
+                    try
+                    {
+                        byte[] imageBytes = await HttpClient.GetByteArrayAsync("https://www.perote.tecnm.mx/img/Gestion2020.png");
+                        using (MemoryStream imageStream = new MemoryStream(imageBytes))
+                        {
+                            PdfBitmap logoBitmap = new PdfBitmap(imageStream);
+                            float logoWidth = 60;
+                            float logoHeight = 30;
+                            headerGraphics.DrawImage(logoBitmap, new RectangleF(0, 5, logoWidth, logoHeight));
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        PdfSolidBrush logoBrush = new PdfSolidBrush(new PdfColor(42, 118, 189));
+                        headerGraphics.DrawRectangle(logoBrush, new RectangleF(0, 5, 60, 30));
+                        headerGraphics.DrawString("LOGO", new PdfStandardFont(PdfFontFamily.Helvetica, 10, PdfFontStyle.Bold),
+                            PdfBrushes.White, new PointF(15, 15));
+                    }
+
+                    // Información de la empresa y reporte
+                    headerGraphics.DrawString(nombreEmpresa, headerFont, PdfBrushes.Black, new PointF(70, 5));
+                    headerGraphics.DrawString(titulo, titleFont, PdfBrushes.Black, new PointF(70, 25));
+
+                    // Fecha y hora en la esquina superior derecha
+                    float pageWidth = document.PageSettings.Width - 100;
+                    headerGraphics.DrawString($"Fecha: {fechaTexto}", contentFont, PdfBrushes.Black,
+                        new PointF(pageWidth - 120, 5));
+                    headerGraphics.DrawString($"Hora: {horaTexto}", contentFont, PdfBrushes.Black,
+                        new PointF(pageWidth - 120, 20));
+
+                    // Línea separadora
+                    headerGraphics.DrawLine(new PdfPen(PdfBrushes.Gray, 1), new PointF(0, 45),
+                        new PointF(pageWidth, 45));
+
+                    // Dibujar footer
+                    PdfGraphics footerGraphics = footer.Graphics;
+                    footerGraphics.DrawLine(new PdfPen(PdfBrushes.Gray, 1), new PointF(0, 5),
+                        new PointF(pageWidth, 5));
+                    footerGraphics.DrawString($"Generado el {fechaTexto} a las {horaTexto}", footerFont,
+                        PdfBrushes.Black, new PointF(0, 15));
+
+                    PdfAutomaticField pageNumber = new PdfPageNumberField(footerFont, PdfBrushes.Black);
+                    PdfAutomaticField pageCount = new PdfPageCountField(footerFont, PdfBrushes.Black);
+                    PdfCompositeField pageInfo = new PdfCompositeField(footerFont, PdfBrushes.Black,
+                        "Página {0} de {1}", pageNumber, pageCount);
+                    pageInfo.Draw(footerGraphics, new PointF(pageWidth - 80, 15));
+
+                    // Asignar templates al documento
+                    document.Template.Top = header;
+                    document.Template.Bottom = footer;
+
+                    // Agregar primera página
+                    PdfPage page = document.Pages.Add();
+                    PdfGraphics graphics = page.Graphics;
+                    float yPosition = 20;
+                    float pageHeight = page.GetClientSize().Height;
+                    float bottomMargin = 100; // Margen inferior para evitar solapamiento con footer
+
+                    // Exportar datos jerárquicos (departamentos con sus ciudades)
+                    foreach (var departamento in FilteredOrders)
+                    {
+                        // Calcular espacio necesario para el departamento (mínimo)
+                        float requiredSpace = 80; // Espacio para título + info del departamento
+                        if (departamento.Ciudades != null && departamento.Ciudades.Any())
+                        {
+                            requiredSpace += 40 + (departamento.Ciudades.Count * 20); // Encabezado + filas de ciudades
+                        }
+
+                        // Verificar si necesitamos una nueva página
+                        if (yPosition + requiredSpace > pageHeight - bottomMargin)
+                        {
+                            page = document.Pages.Add();
+                            graphics = page.Graphics;
+                            yPosition = 20;
+                        }
+
+                        // Dibujar información del departamento
+                        graphics.DrawString($"DEPARTAMENTO: {departamento.vcampo2}", subHeaderFont,
+                            PdfBrushes.DarkBlue, new PointF(0, yPosition));
+                        yPosition += 25;
+
+                        // Información adicional del departamento
+                        graphics.DrawString($"Código: {departamento.vcampo1} | Código DANE: {departamento.vcampo3} | País: {departamento.vcampo4}",
+                            contentFont, PdfBrushes.Black, new PointF(20, yPosition));
+                        yPosition += 30;
+
+                        // Crear tabla para las ciudades
+                        if (departamento.Ciudades != null && departamento.Ciudades.Any())
+                        {
+                            // Verificar si hay espacio suficiente para al menos el encabezado y una fila
+                            if (yPosition + 60 > pageHeight - bottomMargin)
+                            {
+                                page = document.Pages.Add();
+                                graphics = page.Graphics;
+                                yPosition = 20;
+                            }
+
+                            PdfGrid cityGrid = new PdfGrid();
+                            cityGrid.Columns.Add(4); // Código, Nombre, Código DANE, País
+
+                            // Configurar anchos de columnas
+                            cityGrid.Columns[0].Width = 80;  // Código Ciudad
+                            cityGrid.Columns[1].Width = 150; // Nombre Ciudad
+                            cityGrid.Columns[2].Width = 100; // Código DANE
+                            cityGrid.Columns[3].Width = 100; // País
+
+                            // Encabezados de ciudades
+                            PdfGridRow cityHeaderRow = cityGrid.Headers.Add(1)[0];
+                            cityHeaderRow.Cells[0].Value = "Código Ciudad";
+                            cityHeaderRow.Cells[1].Value = "Nombre Ciudad";
+                            cityHeaderRow.Cells[2].Value = "Código DANE";
+                            cityHeaderRow.Cells[3].Value = "País";
+
+                            cityHeaderRow.Style.Font = headerFont;
+                            cityHeaderRow.Style.BackgroundBrush = PdfBrushes.LightGray;
+                            cityHeaderRow.Style.TextBrush = PdfBrushes.Black;
+
+                            // Agregar datos de ciudades
+                            foreach (var ciudad in departamento.Ciudades)
+                            {
+                                PdfGridRow cityRow = cityGrid.Rows.Add();
+                                cityRow.Cells[0].Value = ciudad.vcampo1 ?? "";
+                                cityRow.Cells[1].Value = ciudad.vcampo2 ?? "";
+                                cityRow.Cells[2].Value = ciudad.vcampo3 ?? "";
+                                cityRow.Cells[3].Value = ciudad.vcampo4 ?? "";
+                            }
+
+                            cityGrid.Style.Font = contentFont;
+                            cityGrid.Style.CellPadding = new PdfPaddings(3, 3, 3, 3);
+
+                            // Configurar layout para manejar saltos de página automáticamente
+                            PdfGridLayoutFormat cityLayoutFormat = new PdfGridLayoutFormat();
+                            cityLayoutFormat.Layout = PdfLayoutType.Paginate;
+                            cityLayoutFormat.Break = PdfLayoutBreakType.FitPage;
+
+                            // Dibujar la tabla de ciudades
+                            PdfGridLayoutResult cityResult = cityGrid.Draw(page, new PointF(20, yPosition), cityLayoutFormat);
+
+                            // Actualizar la página actual si la tabla se extendió a nuevas páginas
+                            if (cityResult.Page != page)
+                            {
+                                page = cityResult.Page;
+                                graphics = page.Graphics;
+                            }
+
+                            yPosition = cityResult.Bounds.Bottom + 25;
+                        }
+                        else
+                        {
+                            // Verificar espacio para el mensaje
+                            if (yPosition + 30 > pageHeight - bottomMargin)
+                            {
+                                page = document.Pages.Add();
+                                graphics = page.Graphics;
+                                yPosition = 20;
+                            }
+
+                            graphics.DrawString("No hay ciudades registradas para este departamento.",
+                                contentFont, PdfBrushes.Gray, new PointF(20, yPosition));
+                            yPosition += 35;
+                        }
+
+                        // Verificar espacio para la línea separadora
+                        if (yPosition + 20 > pageHeight - bottomMargin)
+                        {
+                            page = document.Pages.Add();
+                            graphics = page.Graphics;
+                            yPosition = 20;
+                        }
+
+                        // Línea separadora entre departamentos
+                        graphics.DrawLine(new PdfPen(PdfBrushes.LightGray, 1), new PointF(0, yPosition),
+                            new PointF(pageWidth, yPosition));
+                        yPosition += 20;
+                    }
+
+                    // Guardar el documento
+                    using (MemoryStream stream = new MemoryStream())
+                    {
+                        document.Save(stream);
+                        fileContent = stream.ToArray();
+                    }
+                }
+
+                fileName += ".pdf";
+                await JSRuntime.InvokeVoidAsync("BlazorDownloadFile", fileName, "application/pdf", Convert.ToBase64String(fileContent));
+            }
+            else if (type == "excel")
+            {
+                // Crear un nuevo documento Excel usando Syncfusion.XlsIO
+                using (ExcelEngine excelEngine = new ExcelEngine())
+                {
+                    IApplication application = excelEngine.Excel;
+                    application.DefaultVersion = ExcelVersion.Excel2016;
+
+                    IWorkbook workbook = application.Workbooks.Create(1);
+                    IWorksheet worksheet = workbook.Worksheets[0];
+                    worksheet.Name = ptabla;
+
+                    // Estilos
+                    IStyle headerStyle = workbook.Styles.Add("HeaderStyle");
+                    headerStyle.Font.Bold = true;
+                    headerStyle.Font.Color = ExcelKnownColors.White;
+                    headerStyle.Color = Color.FromArgb(42, 118, 189);
+                    headerStyle.HorizontalAlignment = ExcelHAlign.HAlignCenter;
+                    
+
+                    IStyle departmentStyle = workbook.Styles.Add("DepartmentStyle");
+                    departmentStyle.Font.Bold = true;
+                    departmentStyle.Color = Color.FromArgb(173, 216, 230);
+                    
+
+                    IStyle cityHeaderStyle = workbook.Styles.Add("CityHeaderStyle");
+                    cityHeaderStyle.Font.Bold = true;
+                    cityHeaderStyle.Color = Color.FromArgb(220, 220, 220);
+                    
+
+                    int row = 1;
+
+                    // Título principal
+                    worksheet.Range[row, 1].Text = titulo;
+                    worksheet.Range[row, 1].CellStyle = headerStyle;
+                    worksheet.Range[row, 1, row, 8].Merge();
+                    row += 2;
+
+                    // Exportar datos jerárquicos
+                    foreach (var departamento in FilteredOrders)
+                    {
+                        // Información del departamento
+                        worksheet.Range[row, 1].Text = "DEPARTAMENTO";
+                        worksheet.Range[row, 2].Text = departamento.vcampo2;
+                        worksheet.Range[row, 3].Text = "Código";
+                        worksheet.Range[row, 4].Text = departamento.vcampo1;
+                        worksheet.Range[row, 5].Text = "Código DANE";
+                        worksheet.Range[row, 6].Text = departamento.vcampo3;
+                        worksheet.Range[row, 7].Text = "País";
+                        worksheet.Range[row, 8].Text = departamento.vcampo4;
+
+                        worksheet.Range[row, 1, row, 8].CellStyle = departmentStyle;
+                        row++;
+
+                        // Encabezados de ciudades
+                        if (departamento.Ciudades != null && departamento.Ciudades.Any())
+                        {
+                            worksheet.Range[row, 2].Text = "Código Ciudad";
+                            worksheet.Range[row, 3].Text = "Nombre Ciudad";
+                            worksheet.Range[row, 4].Text = "Código DANE";
+                            worksheet.Range[row, 5].Text = "País";
+                            worksheet.Range[row, 2, row, 5].CellStyle = cityHeaderStyle;
+                            row++;
+
+                            // Datos de ciudades
+                            foreach (var ciudad in departamento.Ciudades)
+                            {
+                                worksheet.Range[row, 2].Text = ciudad.vcampo1 ?? "";
+                                worksheet.Range[row, 3].Text = ciudad.vcampo2 ?? "";
+                                worksheet.Range[row, 4].Text = ciudad.vcampo3 ?? "";
+                                worksheet.Range[row, 5].Text = ciudad.vcampo4 ?? "";
+                                row++;
+                            }
+                        }
+                        else
+                        {
+                            worksheet.Range[row, 2].Text = "No hay ciudades registradas";
+                            row++;
+                        }
+
+                        row++; // Espacio entre departamentos
+                    }
+
+                    // Autoajustar columnas
+                    worksheet.UsedRange.AutofitColumns();
+
+                    // Guardar el libro
+                    using (MemoryStream stream = new MemoryStream())
+                    {
+                        workbook.SaveAs(stream);
+                        fileContent = stream.ToArray();
+                    }
+                }
+
+                fileName += ".xlsx";
+                await JSRuntime.InvokeVoidAsync("BlazorDownloadFile", fileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(fileContent));
+            }
+            else if (type == "csv")
+            {
+                var sb = new StringBuilder();
+
+                // Encabezado principal
+                sb.AppendLine($"\"Reporte: {titulo}\"");
+                sb.AppendLine($"\"Fecha: {DateTime.Now:dd/MM/yyyy HH:mm:ss}\"");
+                sb.AppendLine("");
+
+                // Datos jerárquicos
+                foreach (var departamento in FilteredOrders)
+                {
+                    // Información del departamento
+                    sb.AppendLine($"\"DEPARTAMENTO\",\"{departamento.vcampo2}\",\"Código\",\"{departamento.vcampo1}\",\"Código DANE\",\"{departamento.vcampo3}\",\"País\",\"{departamento.vcampo4}\"");
+
+                    // Encabezados de ciudades
+                    if (departamento.Ciudades != null && departamento.Ciudades.Any())
+                    {
+                        sb.AppendLine("\"\",\"Código Ciudad\",\"Nombre Ciudad\",\"Código DANE\",\"País\"");
+
+                        // Datos de ciudades
+                        foreach (var ciudad in departamento.Ciudades)
+                        {
+                            sb.AppendLine($"\"\",\"{ciudad.vcampo1}\",\"{ciudad.vcampo2}\",\"{ciudad.vcampo3}\",\"{ciudad.vcampo4}\"");
+                        }
+                    }
+                    else
+                    {
+                        sb.AppendLine("\"\",\"No hay ciudades registradas\"");
+                    }
+
+                    sb.AppendLine(""); // Línea vacía entre departamentos
+                }
+
+                fileContent = Encoding.UTF8.GetBytes(sb.ToString());
+                fileName += ".csv";
+                await JSRuntime.InvokeVoidAsync("BlazorDownloadFile", fileName, "text/csv", Convert.ToBase64String(fileContent));
+            }
+
+            NotificationService.Notify(NotificationSeverity.Success, "Éxito", "La exportación se ha completado. La descarga debería comenzar en breve.");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", $"Error exportando datos: {ex.Message}");
+        }
+    }
+
+    // Clases auxiliares (basadas en ModeloBasico30.razor)
+    public class valueField
+    {
+        public string? vText { get; set; }
+        public double? vNum { get; set; }
+        public string? vSuc { get; set; }
+        public string? vDesc { get; set; }
+        public string? vVigencia { get; set; }
+        public DateTime? vDate { get; set; }
+        public int nTab { get; set; }
+        public int nRow { get; set; }
+        public string fType { get; set; }
+        public string Name { get; set; }
+        public bool keyLock { get; set; }
+        public string? sql { get; set; }
+        public string? height { get; set; }
+        public string? width { get; set; }
+        public string? typeinput { get; set; }
+        public int index { get; set; }
+        public string? contenedor { get; set; }
+        public int nDet { get; set; }
+        public string? newRecord { get; set; }
+        public string? label { get; set; }
+        public bool visibleText { get; set; }
+        public bool visibleCb { get; set; }
+        public bool visibleNum { get; set; }
+        public bool visibleDate { get; set; }
+        public int nConf { get; set; }
+        public int nField { get; set; }
+        public bool updatable { get; set; }
+        public bool isreadonly { get; set; }
+        public string? vDesc2 { get; set; }
+        public string? vDesc3 { get; set; }
+    }
+
+    public class Ciudad
+    {
+        public string? CodigoCiudad { get; set; }
+        public string? NombreCiudad { get; set; }
+        public string? CodigoDepartamento { get; set; }
+        public bool Selected { get; set; } = false;
+
+        // Campos adicionales para mostrar en la grilla
+        public string? vcampo1 { get; set; }
+        public string? vcampo2 { get; set; }
+        public string? vcampo3 { get; set; }
+        public string? vcampo4 { get; set; }
+        public string? vcampo5 { get; set; }
+        public string? vcampo6 { get; set; }
+    }
+
+    public class Order
+    {
+        public Order()
+        {
+            Ciudades = new List<Ciudad>();
+        }
+
+        public string? OrderID { get; set; }
+        public string? Nombre { get; set; }
+        public bool Selected { get; set; } = false;
+        public bool Expanded { get; set; } = false;
+        public List<Ciudad> Ciudades { get; set; }
+
+        public valueField?[] fields { get; set; }
+        public string[] sFields { get; set; }
+
+        public string? campo1 { get; set; }
+        public string? campo2 { get; set; }
+        public string? campo3 { get; set; }
+        public string? campo4 { get; set; }
+        public string? campo5 { get; set; }
+        public string? campo6 { get; set; }
+        public string? campo7 { get; set; }
+        public string? campo8 { get; set; }
+        public string? campo9 { get; set; }
+        public string? campo10 { get; set; }
+
+        public DateTime? fecha1 { get; set; }
+        public DateTime? fecha2 { get; set; }
+        public DateTime? fecha3 { get; set; }
+        public DateTime? fecha4 { get; set; }
+        public DateTime? fecha5 { get; set; }
+        public DateTime? fecha6 { get; set; }
+        public DateTime? fecha7 { get; set; }
+        public DateTime? fecha8 { get; set; }
+        public DateTime? fecha9 { get; set; }
+        public DateTime? fecha10 { get; set; }
+
+        public valueField? fields1 { get; set; }
+        public valueField? fields2 { get; set; }
+        public valueField? fields3 { get; set; }
+        public valueField? fields4 { get; set; }
+        public valueField? fields5 { get; set; }
+        public valueField? fields6 { get; set; }
+        public valueField? fields7 { get; set; }
+        public valueField? fields8 { get; set; }
+        public valueField? fields9 { get; set; }
+        public valueField? fields10 { get; set; }
+        public valueField? fields11 { get; set; }
+        public valueField? fields12 { get; set; }
+        public valueField? fields13 { get; set; }
+        public valueField? fields14 { get; set; }
+        public valueField? fields15 { get; set; }
+        public valueField? fields16 { get; set; }
+        public valueField? fields17 { get; set; }
+        public valueField? fields18 { get; set; }
+        public valueField? fields19 { get; set; }
+        public valueField? fields20 { get; set; }
+        public valueField? fields21 { get; set; }
+        public valueField? fields22 { get; set; }
+        public valueField? fields23 { get; set; }
+        public valueField? fields24 { get; set; }
+        public valueField? fields25 { get; set; }
+        public valueField? fields26 { get; set; }
+        public valueField? fields27 { get; set; }
+        public valueField? fields28 { get; set; }
+        public valueField? fields29 { get; set; }
+        public valueField? fields30 { get; set; }
+
+        public string? vcampo0 { get; set; } // primary key
+        public string? vcampo1 { get; set; }
+        public string? vcampo2 { get; set; }
+        public string? vcampo3 { get; set; }
+        public string? vcampo4 { get; set; }
+        public string? vcampo5 { get; set; }
+        public string? vcampo6 { get; set; }
+        public string? vcampo7 { get; set; }
+        public string? vcampo8 { get; set; }
+        public string? vcampo9 { get; set; }
+        public string? vcampo10 { get; set; }
+    }
+}
+
