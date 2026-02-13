@@ -8,6 +8,11 @@ Cerebrum es una plataforma empresarial de alto rendimiento diseñada para la ges
 
 ## **Visión General del Proyecto**
 
+![Reporte de Países](https://portafolio-andresloz-66.vercel.app/Reportes_paises.jpeg)
+![Reporte de Departamentos](https://portafolio-andresloz-66.vercel.app/reportedepartamentos.png)
+![Editor de Factura](https://portafolio-andresloz-66.vercel.app/Factura_editable.jpeg)
+![Kardex de Inventario](https://portafolio-andresloz-66.vercel.app/kardex.png)
+
 El objetivo principal de Cerebrum es ofrecer una experiencia de usuario (UX) fluida y reactiva, minimizando la latencia en el procesamiento de grandes volúmenes de datos. La plataforma utiliza un stack tecnológico moderno basado en **C#**, **Blazor Server** y **PostgreSQL**, optimizando la comunicación con el motor de base de datos mediante ejecución directa con **Npgsql**.
 
 ---
