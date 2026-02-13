@@ -4,7 +4,7 @@
 ![Cerebrum Banner](https://img.shields.io/badge/Database-PostgreSQL-blue)
 ![Cerebrum Banner](https://img.shields.io/badge/Performance-Optimized-green)
 
-Cerebrum es una plataforma empresarial de alto rendimiento diseñada para la gestión integral de procesos académicos, financieros y administrativos. Este repositorio documenta la arquitectura técnica, las optimizaciones de rendimiento y las decisiones de ingeniería que fundamentan la escalabilidad y eficiencia del sistema.
+Cerebrum es una plataforma empresarial de alto rendimiento diseñada para la gestión integral de procesos académicos, financieros y administrativos. Este repositorio documenta la arquitectura técnica, las optimizaciones de rendimiento y las decisiones que fundamentan la escalabilidad y eficiencia del sistema.
 
 ## **Visión General del Proyecto**
 
