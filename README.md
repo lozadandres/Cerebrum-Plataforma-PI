@@ -66,7 +66,7 @@ El desarrollo se centró inicialmente en la robustez de los datos. La prioridad 
 Si bien el uso de `forceLoad: true` resolvió problemas inmediatos de latencia por recargas múltiples, una aproximación de navegación SPA pura desde el primer día habría sido ideal. No obstante, la solución actual equilibra perfectamente la estabilidad con la velocidad requerida por el usuario final.
 
 ### **Detrás del Código: Mi Narrativa**
-Como ingeniero, el mayor reto no fue solo hacer que el código funcionara, sino que fuera **rápido**. Ver la transformación de una pantalla que tardaba 4 segundos en cargar a una que responde en menos de un segundo es la mayor satisfacción técnica de este proyecto. Cerebrum no es solo una plataforma de datos; es una herramienta diseñada para la eficiencia humana.
+El mayor reto no fue solo hacer que el código funcionara, sino que fuera **rápido**. Ver la transformación de una pantalla que tardaba 4 segundos en cargar a una que responde en menos de un segundo es la mayor satisfacción técnica de este proyecto. Cerebrum no es solo una plataforma de datos; es una herramienta diseñada para la eficiencia humana.
 
 ---
 
